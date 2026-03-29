@@ -3729,7 +3729,7 @@ export default function PerformanceTracker({ initialLocTypes, initialPractices, 
 
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 24, marginBottom: 24 }}>
           <ChartCard
-            title="Total Injectables Sales"
+            title="Total Inject. Sales"
             tooltip="All injectable revenue (neuromodulators + fillers) by location"
             headerRight={
               <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
@@ -3754,7 +3754,7 @@ export default function PerformanceTracker({ initialLocTypes, initialPractices, 
             />
           </ChartCard>
           <ChartCard
-            title="Injectables Sales as % of Total Sales"
+            title="Inject. Sales as % of Total Sales"
             tooltip="Injectable revenue share of total sales by location"
             headerRight={
               <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
@@ -3819,7 +3819,7 @@ export default function PerformanceTracker({ initialLocTypes, initialPractices, 
             />
           </ChartCard>
           <ChartCard
-            title="Injectables Revenue by Provider"
+            title="Inject. Revenue by Provider"
             tooltip="Weekly injectable revenue by provider for filtered locations"
             headerRight={hasActiveFilter ?
               <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
@@ -3854,7 +3854,7 @@ export default function PerformanceTracker({ initialLocTypes, initialPractices, 
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 24, marginBottom: 24 }}>
           {btxChartData ? (
             <ChartCard
-              title="Avg Botox Units per Botox Appointment"
+              title="Avg Botox Units per Botox Appt"
               tooltip="Average units per unique botox appointment by location"
               headerRight={
                 <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
@@ -3880,12 +3880,12 @@ export default function PerformanceTracker({ initialLocTypes, initialPractices, 
             </ChartCard>
           ) : (
             <PlaceholderCard
-              title="Avg Botox Units per Botox Appointment"
+              title="Avg Botox Units per Botox Appt"
               message="Botox unit data will be populated in the next iteration"
             />
           )}
           <ChartCard
-            title="Avg Botox Units per Botox Appointment by Provider"
+            title="Avg Botox Units per Botox Appt by Provider"
             tooltip="Average botox units per appointment by provider for filtered locations"
             headerRight={hasActiveFilter ?
               <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
@@ -3919,7 +3919,7 @@ export default function PerformanceTracker({ initialLocTypes, initialPractices, 
         {/* Filler syringes per injectables appointment — placeholders */}
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 24, marginBottom: 24 }}>
           <ChartCard
-            title="Avg Filler Syringes Per Injectables Appointment"
+            title="Avg Filler Syringes Per Inject. Appt"
             tooltip="Average filler syringes dispensed per unique injectable appointment (includes non-filler inj appointments)"
             headerRight={
               <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
@@ -3944,7 +3944,7 @@ export default function PerformanceTracker({ initialLocTypes, initialPractices, 
             />
           </ChartCard>
           <ChartCard
-            title="Avg Filler Syringes Per Injectables Appt by Provider"
+            title="Avg Filler Syringes Per Inject. Appt by Provider"
             tooltip="Average filler syringes per injectable appointment broken down by provider"
             headerRight={hasActiveFilter ?
               <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
@@ -3978,7 +3978,7 @@ export default function PerformanceTracker({ initialLocTypes, initialPractices, 
         {/* Filler syringes per filler appointment — placeholders */}
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 24, marginBottom: 24 }}>
           <ChartCard
-            title="Avg Filler Syringes Per Filler Appointment"
+            title="Avg Filler Syringes Per Filler Appt"
             tooltip="Average filler syringes dispensed per filler-only appointment (excludes neurotoxin-only visits)"
             headerRight={
               <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
