@@ -1828,9 +1828,11 @@ export default function PerformanceTracker({ initialLocTypes, initialPractices, 
         if (!locTypes.some(t => selectedLocTypes.includes(t))) return false;
       }
       if (selectedPractices.length && !selectedPractices.includes(l.practice)) return false;
+      // For pre-filtered views, also restrict to the initially selected locations
+      if (globalSelectedLocs.length && !globalSelectedLocs.includes(l.name)) return false;
       return true;
     });
-  }, [locations, selectedLocTypes, selectedPractices]);
+  }, [locations, selectedLocTypes, selectedPractices, globalSelectedLocs]);
 
   const locationNames = useMemo(() => filteredLocations.map(l => l.name), [filteredLocations]);
 
