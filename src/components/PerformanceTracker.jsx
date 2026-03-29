@@ -1704,9 +1704,22 @@ export default function PerformanceTracker({ initialLocTypes, initialPractices, 
   const [injRevProviders, setInjRevProviders] = useState([]); // empty = no providers selected
   const [btxProviders, setBtxProviders] = useState([]); // empty = no providers selected
   const TOTAL = 'Total';
+  const isSingleLocation = initialLocations?.length === 1;
+  // For single-location views, default chart dropdowns to show that location's data (not "Total")
+  const defaultChartLoc = isSingleLocation ? initialLocations : [TOTAL];
   const [globalTimeMode, setGlobalTimeMode] = useState('weekly');
   const [globalPeriodCount, setGlobalPeriodCount] = useState(12);
   const [chartTimeOverrides, setChartTimeOverrides] = useState({});
+
+  // Sections below Location Report start minimized for single-location views
+  const [sectionsMinimized, setSectionsMinimized] = useState({
+    section1: isSingleLocation,
+    section2: isSingleLocation,
+    section3: isSingleLocation,
+    section4: isSingleLocation,
+    appendix: isSingleLocation,
+  });
+  const toggleSection = (key) => setSectionsMinimized(prev => ({ ...prev, [key]: !prev[key] }));
 
   const getEffectiveTime = (chartId) => {
     const override = chartTimeOverrides[chartId];
@@ -1716,28 +1729,28 @@ export default function PerformanceTracker({ initialLocTypes, initialPractices, 
     };
   };
 
-  const [revChartLocs, setRevChartLocs] = useState([TOTAL]);
-  const [collChartLocs, setCollChartLocs] = useState([TOTAL]);
-  const [avgRevLocs, setAvgRevLocs] = useState([TOTAL]);
-  const [uniquePtLocs, setUniquePtLocs] = useState([TOTAL]);
-  const [retailLocs, setRetailLocs] = useState([TOTAL]);
-  const [retailPctLocs, setRetailPctLocs] = useState([TOTAL]);
-  const [injSalesLocs, setInjSalesLocs] = useState([TOTAL]);
-  const [injPctLocs, setInjPctLocs] = useState([TOTAL]);
-  const [btxLocs, setBtxLocs] = useState([TOTAL]);
-  const [aggBtxLocs, setAggBtxLocs] = useState([TOTAL]);
-  const [cancelLocs, setCancelLocs] = useState([TOTAL]);
-  const [utilizationLocs, setUtilizationLocs] = useState([TOTAL]);
-  const [netHoursLocs, setNetHoursLocs] = useState([TOTAL]);
-  const [noshowLocs, setNoshowLocs] = useState([TOTAL]);
-  const [ntxFillerLocs, setNtxFillerLocs] = useState([TOTAL]);
-  const [revCollHoursLocs, setRevCollHoursLocs] = useState([TOTAL]);
-  const [revPerHourLocs, setRevPerHourLocs] = useState([TOTAL]);
-  const [syrInjLocs, setSyrInjLocs] = useState([TOTAL]);
-  const [syrFillerLocs, setSyrFillerLocs] = useState([TOTAL]);
+  const [revChartLocs, setRevChartLocs] = useState(defaultChartLoc);
+  const [collChartLocs, setCollChartLocs] = useState(defaultChartLoc);
+  const [avgRevLocs, setAvgRevLocs] = useState(defaultChartLoc);
+  const [uniquePtLocs, setUniquePtLocs] = useState(defaultChartLoc);
+  const [retailLocs, setRetailLocs] = useState(defaultChartLoc);
+  const [retailPctLocs, setRetailPctLocs] = useState(defaultChartLoc);
+  const [injSalesLocs, setInjSalesLocs] = useState(defaultChartLoc);
+  const [injPctLocs, setInjPctLocs] = useState(defaultChartLoc);
+  const [btxLocs, setBtxLocs] = useState(defaultChartLoc);
+  const [aggBtxLocs, setAggBtxLocs] = useState(defaultChartLoc);
+  const [cancelLocs, setCancelLocs] = useState(defaultChartLoc);
+  const [utilizationLocs, setUtilizationLocs] = useState(defaultChartLoc);
+  const [netHoursLocs, setNetHoursLocs] = useState(defaultChartLoc);
+  const [noshowLocs, setNoshowLocs] = useState(defaultChartLoc);
+  const [ntxFillerLocs, setNtxFillerLocs] = useState(defaultChartLoc);
+  const [revCollHoursLocs, setRevCollHoursLocs] = useState(defaultChartLoc);
+  const [revPerHourLocs, setRevPerHourLocs] = useState(defaultChartLoc);
+  const [syrInjLocs, setSyrInjLocs] = useState(defaultChartLoc);
+  const [syrFillerLocs, setSyrFillerLocs] = useState(defaultChartLoc);
   const [syrInjProviders, setSyrInjProviders] = useState(null);
   const [syrFillerProviders, setSyrFillerProviders] = useState(null);
-  const [revCollAppendixLocs, setRevCollAppendixLocs] = useState([TOTAL]);
+  const [revCollAppendixLocs, setRevCollAppendixLocs] = useState(defaultChartLoc);
   const [revCollProvAppendixProviders, setRevCollProvAppendixProviders] = useState(null);
   const [revCollProvAppendixLocs, setRevCollProvAppendixLocs] = useState([]);
 
@@ -3378,7 +3391,10 @@ export default function PerformanceTracker({ initialLocTypes, initialPractices, 
         {/* ══════════════════════════════════════════════════
            SECTION 1: Top Line Performance Deep Dive
            ══════════════════════════════════════════════════ */}
-        <SectionSeparator number="1" title="Top Line Performance Deep Dive" />
+        <div onClick={() => toggleSection('section1')} style={{ cursor: 'pointer', userSelect: 'none' }}>
+          <SectionSeparator number="1" title={`Top Line Performance Deep Dive ${sectionsMinimized.section1 ? '▸' : ''}`} />
+        </div>
+        <div style={{ display: sectionsMinimized.section1 ? 'none' : 'block' }}>
 
         {/* MTD Summary + Service Mix (left 25%) | Weekly Charts (right 75%) */}
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 3fr', gap: 24, marginBottom: 24 }}>
@@ -3476,10 +3492,15 @@ export default function PerformanceTracker({ initialLocTypes, initialPractices, 
           </ChartCard>
         </div>
 
+        </div>{/* end section 1 collapsible */}
+
         {/* ══════════════════════════════════════════════════
            SECTION 2: Core KPIs
            ══════════════════════════════════════════════════ */}
-        <SectionSeparator number="2" title="Core KPIs" />
+        <div onClick={() => toggleSection('section2')} style={{ cursor: 'pointer', userSelect: 'none' }}>
+          <SectionSeparator number="2" title={`Core KPIs ${sectionsMinimized.section2 ? '▸' : ''}`} />
+        </div>
+        <div style={{ display: sectionsMinimized.section2 ? 'none' : 'block' }}>
 
         {/* Unique Patients + Avg Rev Per Patient */}
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 24, marginBottom: 24 }}>
@@ -3698,10 +3719,15 @@ export default function PerformanceTracker({ initialLocTypes, initialPractices, 
         </div>
 
 
+        </div>{/* end section 2 collapsible */}
+
         {/* ══════════════════════════════════════════════════
            SECTION 3: Service Mix Shift
            ══════════════════════════════════════════════════ */}
-        <SectionSeparator number="3" title="Service Mix Shift" />
+        <div onClick={() => toggleSection('section3')} style={{ cursor: 'pointer', userSelect: 'none' }}>
+          <SectionSeparator number="3" title={`Service Mix Shift ${sectionsMinimized.section3 ? '▸' : ''}`} />
+        </div>
+        <div style={{ display: sectionsMinimized.section3 ? 'none' : 'block' }}>
 
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 24, marginBottom: 24 }}>
           <ChartCard
@@ -3757,10 +3783,15 @@ export default function PerformanceTracker({ initialLocTypes, initialPractices, 
         </div>
 
 
+        </div>{/* end section 3 collapsible */}
+
         {/* ══════════════════════════════════════════════════
            SECTION 4: Provider Productivity
            ══════════════════════════════════════════════════ */}
-        <SectionSeparator number="4" title="Provider Productivity" />
+        <div onClick={() => toggleSection('section4')} style={{ cursor: 'pointer', userSelect: 'none' }}>
+          <SectionSeparator number="4" title={`Provider Productivity ${sectionsMinimized.section4 ? '▸' : ''}`} />
+        </div>
+        <div style={{ display: sectionsMinimized.section4 ? 'none' : 'block' }}>
 
         {/* NTX vs Filler placeholder + Injectables Rev by Provider */}
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 24, marginBottom: 24 }}>
@@ -4006,10 +4037,15 @@ export default function PerformanceTracker({ initialLocTypes, initialPractices, 
         </div>
 
 
+        </div>{/* end section 4 collapsible */}
+
         {/* ══════════════════════════════════════════════════
            APPENDIX: Service Mix
            ══════════════════════════════════════════════════ */}
-        <SectionSeparator number="A" title="Appendix" />
+        <div onClick={() => toggleSection('appendix')} style={{ cursor: 'pointer', userSelect: 'none' }}>
+          <SectionSeparator number="A" title={`Appendix ${sectionsMinimized.appendix ? '▸' : ''}`} />
+        </div>
+        <div style={{ display: sectionsMinimized.appendix ? 'none' : 'block' }}>
 
         {/* Revenue vs Collections with Net Scheduled Provider Hours on secondary axis */}
         <div style={{ marginBottom: 24 }}>
@@ -4180,6 +4216,8 @@ export default function PerformanceTracker({ initialLocTypes, initialPractices, 
             <ServiceMixTable data={serviceMixData} />
           </ChartCard>
         </div>
+
+        </div>{/* end appendix collapsible */}
 
         {/* ── Footer ──────────────────────────────────────── */}
         <div style={{
