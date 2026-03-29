@@ -224,8 +224,8 @@ function MultiSelectDropdown({ label, options, selected, onChange, minWidth = 20
       <div
         onClick={() => setOpen(!open)}
         style={{
-          padding: '8px 32px 8px 12px', border: `1.5px solid ${V.taupe}`,
-          borderRadius: 6, fontSize: 13, fontFamily: FONT.body,
+          padding: '4px 26px 4px 8px', border: `1px solid ${V.taupe}`,
+          borderRadius: 4, fontSize: 10, fontFamily: FONT.body,
           color: selected.length ? V.navy : V.gray, background: V.cream,
           minWidth, cursor: 'pointer', userSelect: 'none',
           position: 'relative', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
@@ -233,8 +233,8 @@ function MultiSelectDropdown({ label, options, selected, onChange, minWidth = 20
       >
         {displayText}
         <span style={{
-          position: 'absolute', right: 10, top: '50%', transform: 'translateY(-50%)',
-          fontSize: 10, color: V.gray, pointerEvents: 'none',
+          position: 'absolute', right: 6, top: '50%', transform: 'translateY(-50%)',
+          fontSize: 8, color: V.gray, pointerEvents: 'none',
         }}>▼</span>
       </div>
       {open && (
@@ -265,7 +265,7 @@ function MultiSelectDropdown({ label, options, selected, onChange, minWidth = 20
               onClick={(e) => { e.stopPropagation(); toggle(opt); }}
               style={{
                 display: 'flex', alignItems: 'center', gap: 8,
-                padding: '6px 12px', cursor: 'pointer', fontSize: 12,
+                padding: '4px 10px', cursor: 'pointer', fontSize: 10,
                 fontFamily: FONT.body, color: V.dark,
                 background: selected.includes(opt) ? V.light : 'transparent',
               }}
@@ -273,7 +273,7 @@ function MultiSelectDropdown({ label, options, selected, onChange, minWidth = 20
               onMouseLeave={e => { e.currentTarget.style.background = selected.includes(opt) ? V.light : 'transparent'; }}
             >
               <span style={{
-                width: 16, height: 16, borderRadius: 3,
+                width: 14, height: 14, borderRadius: 3,
                 border: `1.5px solid ${selected.includes(opt) ? V.gold : V.taupe}`,
                 background: selected.includes(opt) ? V.gold : V.white,
                 display: 'flex', alignItems: 'center', justifyContent: 'center',
@@ -325,10 +325,10 @@ function ChartCard({ title, tooltip, children, width = '100%', height, headerRig
   return (
     <div style={{
       background: V.white, borderRadius: 10, border: `1px solid ${V.taupe}`,
-      padding: '20px 24px', width, boxSizing: 'border-box',
+      padding: '14px 16px', width, boxSizing: 'border-box',
       minHeight: height || 'auto',
     }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 16, gap: 12 }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 10, gap: 8 }}>
         <h3 style={{
           fontFamily: FONT.heading, fontSize: 16, fontWeight: 400,
           color: V.navy, margin: 0, flexShrink: 0,
@@ -3468,7 +3468,7 @@ export default function PerformanceTracker({ initialLocTypes, initialPractices, 
                     options={['Total', ...locationNames]}
                     selected={revChartLocs}
                     onChange={setRevChartLocs}
-                    minWidth={170}
+                    minWidth={85}
                   />
                 </div>
               }
@@ -3476,7 +3476,7 @@ export default function PerformanceTracker({ initialLocTypes, initialPractices, 
               <MultiLineChart
                 data={revChartData}
                 series={revChartSeries}
-                height={200}
+                height={300}
                 formatter={fmtK}
                 colorMap={{ 'All Locations': V.gold, Budget: V.navy, ...locationColorMap }}
                 rightAxisSeries={revChartLocs.filter(n => n !== 'Total')}
@@ -3492,7 +3492,7 @@ export default function PerformanceTracker({ initialLocTypes, initialPractices, 
                     options={['Total', ...locationNames]}
                     selected={collChartLocs}
                     onChange={setCollChartLocs}
-                    minWidth={170}
+                    minWidth={85}
                   />
                 </div>
               }
@@ -3500,7 +3500,7 @@ export default function PerformanceTracker({ initialLocTypes, initialPractices, 
               <MultiLineChart
                 data={collChartData}
                 series={collChartSeries}
-                height={200}
+                height={300}
                 formatter={fmtK}
                 colorMap={{ 'All Locations': V.gold, Budget: V.navy, ...locationColorMap }}
                 rightAxisSeries={collChartLocs.filter(n => n !== 'Total')}
@@ -3522,7 +3522,7 @@ export default function PerformanceTracker({ initialLocTypes, initialPractices, 
                   options={['Total', ...locationNames]}
                   selected={revCollAppendixLocs}
                   onChange={setRevCollAppendixLocs}
-                  minWidth={170}
+                  minWidth={85}
                 />
               </div>
             }
@@ -3530,7 +3530,7 @@ export default function PerformanceTracker({ initialLocTypes, initialPractices, 
             <MultiLineChart
               data={revCollAppendixData}
               series={revCollAppendixSeries}
-              height={380}
+              height={300}
               formatter={fmtK}
               rightAxisFormatter={fmtPct}
               colorMap={{
@@ -3683,7 +3683,7 @@ export default function PerformanceTracker({ initialLocTypes, initialPractices, 
             <MultiLineChart
               data={cancelData}
               series={cancelSeries}
-              height={320}
+              height={300}
               formatter={fmtPct}
               colorMap={{ Total: V.gold, ...locationColorMap }}
               rightAxisSeries={cancelLocs.filter(n => n !== 'Total')}
@@ -3708,7 +3708,7 @@ export default function PerformanceTracker({ initialLocTypes, initialPractices, 
             <MultiLineChart
               data={noshowData}
               series={noshowSeries}
-              height={320}
+              height={300}
               formatter={fmtPct}
               colorMap={{ Total: V.gold, ...locationColorMap }}
               rightAxisSeries={noshowLocs.filter(n => n !== 'Total')}
@@ -3737,7 +3737,7 @@ export default function PerformanceTracker({ initialLocTypes, initialPractices, 
             <MultiLineChart
               data={utilizationChartData}
               series={utilizationSeries}
-              height={320}
+              height={300}
               formatter={fmtPct}
               colorMap={{ Total: V.gold, ...locationColorMap }}
               rightAxisSeries={utilizationLocs.filter(n => n !== TOTAL)}
@@ -3762,7 +3762,7 @@ export default function PerformanceTracker({ initialLocTypes, initialPractices, 
             <MultiLineChart
               data={netHoursChartData}
               series={netHoursSeries}
-              height={320}
+              height={300}
               formatter={(v) => v != null ? `${v.toLocaleString()} hrs` : ''}
               colorMap={{ Total: V.gold, ...locationColorMap }}
               rightAxisSeries={netHoursLocs.filter(n => n !== TOTAL)}
@@ -3801,7 +3801,7 @@ export default function PerformanceTracker({ initialLocTypes, initialPractices, 
             <MultiLineChart
               data={injSalesData}
               series={injSalesSeries}
-              height={320}
+              height={300}
               formatter={fmtK}
               colorMap={{ Total: V.gold, ...locationColorMap }}
               rightAxisSeries={injSalesLocs.filter(n => n !== 'Total')}
@@ -3826,7 +3826,7 @@ export default function PerformanceTracker({ initialLocTypes, initialPractices, 
             <MultiLineChart
               data={injPctData}
               series={injPctSeries}
-              height={320}
+              height={300}
               formatter={fmtPct}
               colorMap={{ Total: V.gold, ...locationColorMap }}
               rightAxisSeries={injPctLocs.filter(n => n !== 'Total')}
@@ -3865,7 +3865,7 @@ export default function PerformanceTracker({ initialLocTypes, initialPractices, 
                   options={availableRevCollHoursProviders}
                   selected={revCollHoursProviders || availableRevCollHoursProviders}
                   onChange={setRevCollHoursProviders}
-                  minWidth={70}
+                  minWidth={85}
                 />
               </div>
             }
@@ -3873,7 +3873,7 @@ export default function PerformanceTracker({ initialLocTypes, initialPractices, 
             <MultiLineChart
               data={revCollHoursData}
               series={revCollHoursSeries}
-              height={380}
+              height={300}
               formatter={fmtK}
               rightAxisFormatter={(v) => v != null ? `${v.toLocaleString()} hrs` : ''}
               colorMap={{
@@ -3907,7 +3907,7 @@ export default function PerformanceTracker({ initialLocTypes, initialPractices, 
                   options={availableRevCollHoursProviders}
                   selected={revPerHourProviders || availableRevCollHoursProviders}
                   onChange={setRevPerHourProviders}
-                  minWidth={70}
+                  minWidth={85}
                 />
               </div>
             }
@@ -3915,7 +3915,7 @@ export default function PerformanceTracker({ initialLocTypes, initialPractices, 
             <MultiLineChart
               data={revPerHourChartData}
               series={revPerHourSeries}
-              height={380}
+              height={300}
               formatter={fmtDollar}
               rightAxisFormatter={fmtPct}
               colorMap={{
@@ -3950,7 +3950,7 @@ export default function PerformanceTracker({ initialLocTypes, initialPractices, 
             <MultiLineChart
               data={ntxFillerChartData}
               series={ntxFillerSeries}
-              height={320}
+              height={300}
               formatter={fmtK}
               colorMap={{ 'Neurotoxin (Total)': V.gold, 'Filler (Total)': V.navy, ...locationColorMap }}
               rightAxisSeries={ntxFillerLocs.filter(n => n !== TOTAL).flatMap(l => [l + ' NTX', l + ' Filler'])}
@@ -3967,7 +3967,7 @@ export default function PerformanceTracker({ initialLocTypes, initialPractices, 
                   options={availableInjProviders}
                   selected={injRevProviders || availableInjProviders}
                   onChange={setInjRevProviders}
-                  minWidth={70}
+                  minWidth={85}
                 />
               </div> : null
             }
@@ -3976,7 +3976,7 @@ export default function PerformanceTracker({ initialLocTypes, initialPractices, 
               <MultiLineChart
                 data={injRevProvData}
                 series={injRevProvSeries}
-                height={320}
+                height={300}
                 formatter={fmtK}
                 colorMap={providerColorMap}
               />
@@ -4010,7 +4010,7 @@ export default function PerformanceTracker({ initialLocTypes, initialPractices, 
               <MultiLineChart
                 data={btxChartData}
                 series={btxSeries}
-                height={320}
+                height={300}
                 formatter={(v) => `${v} units`}
                 colorMap={{ Total: V.gold, ...locationColorMap }}
                 rightAxisSeries={btxLocs.filter(n => n !== 'Total')}
@@ -4033,7 +4033,7 @@ export default function PerformanceTracker({ initialLocTypes, initialPractices, 
                   options={availableBtxProviders}
                   selected={btxProviders || availableBtxProviders}
                   onChange={setBtxProviders}
-                  minWidth={70}
+                  minWidth={85}
                 />
               </div> : null
             }
@@ -4092,7 +4092,7 @@ export default function PerformanceTracker({ initialLocTypes, initialPractices, 
                   options={availableSyrProviders}
                   selected={syrInjProviders || availableSyrProviders}
                   onChange={setSyrInjProviders}
-                  minWidth={70}
+                  minWidth={85}
                 />
               </div> : null
             }
@@ -4151,7 +4151,7 @@ export default function PerformanceTracker({ initialLocTypes, initialPractices, 
                   options={availableSyrProviders}
                   selected={syrFillerProviders || availableSyrProviders}
                   onChange={setSyrFillerProviders}
-                  minWidth={70}
+                  minWidth={85}
                 />
               </div> : null
             }
@@ -4203,13 +4203,13 @@ export default function PerformanceTracker({ initialLocTypes, initialPractices, 
                   options={availableRevCollProviders}
                   selected={revCollProvAppendixProviders || availableRevCollProviders}
                   onChange={setRevCollProvAppendixProviders}
-                  minWidth={70}
+                  minWidth={85}
                 />
               </div> : null
             }
           >
             {hasActiveFilter ? (
-              <ResponsiveContainer width="100%" height={400}>
+              <ResponsiveContainer width="100%" height={300}>
                 <ComposedChart data={revCollProvChartData} margin={{ top: 8, right: 48, left: 0, bottom: 0 }}>
                   <CartesianGrid strokeDasharray="3 3" stroke={V.taupe} />
                   <XAxis dataKey="week" tick={{ fontSize: 11, fontFamily: FONT.body, fill: V.gray }} />
