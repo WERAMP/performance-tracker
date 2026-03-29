@@ -837,7 +837,7 @@ function buildOpsChart(opsData, filteredNames, opsNameMap, valueKey) {
 // ══════════════════════════════════════════════════════════════
 
 function LocationReport({ location, locations, metrics, opsData, btxData, syringeLocData, utilizationData, providerHoursData, injRevProviderData, btxProviderData, syringeProvData, revCollProvData }) {
-  const [expandedSections, setExpandedSections] = useState({ kpi: true, efficiency: true, providers: true, recommendations: true });
+  const [expandedSections, setExpandedSections] = useState({ kpi: false, efficiency: false, providers: false, recommendations: false });
   const toggleSection = (key) => setExpandedSections(prev => ({ ...prev, [key]: !prev[key] }));
 
   const reportData = useMemo(() => {
@@ -1711,13 +1711,13 @@ export default function PerformanceTracker({ initialLocTypes, initialPractices, 
   const [globalPeriodCount, setGlobalPeriodCount] = useState(12);
   const [chartTimeOverrides, setChartTimeOverrides] = useState({});
 
-  // Sections below Location Report start minimized for single-location views
+  // Sections always start expanded
   const [sectionsMinimized, setSectionsMinimized] = useState({
-    section1: isSingleLocation,
-    section2: isSingleLocation,
-    section3: isSingleLocation,
-    section4: isSingleLocation,
-    appendix: isSingleLocation,
+    section1: false,
+    section2: false,
+    section3: false,
+    section4: false,
+    appendix: false,
   });
   const toggleSection = (key) => setSectionsMinimized(prev => ({ ...prev, [key]: !prev[key] }));
 
