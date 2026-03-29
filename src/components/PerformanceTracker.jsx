@@ -3293,34 +3293,41 @@ export default function PerformanceTracker({ initialLocTypes, initialPractices, 
           borderRadius: 10, border: `1px solid ${V.taupe}`,
           marginBottom: 32, flexWrap: 'wrap',
         }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-            <label style={{
-              fontSize: 10, fontWeight: 700, color: V.navy,
-              letterSpacing: 1.5, textTransform: 'uppercase', fontFamily: FONT.body,
-            }}>Location Type</label>
-            <MultiSelectDropdown
-              label="Location Type"
-              options={locationTypes}
-              selected={selectedLocTypes}
-              onChange={setSelectedLocTypes}
-              minWidth={200}
-            />
-          </div>
+          {/* Location Type dropdown: hidden when pre-filtered by practice or location */}
+          {!initialPractices?.length && !initialLocations?.length && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <label style={{
+                fontSize: 10, fontWeight: 700, color: V.navy,
+                letterSpacing: 1.5, textTransform: 'uppercase', fontFamily: FONT.body,
+              }}>Location Type</label>
+              <MultiSelectDropdown
+                label="Location Type"
+                options={initialLocTypes?.length ? initialLocTypes : locationTypes}
+                selected={selectedLocTypes}
+                onChange={setSelectedLocTypes}
+                minWidth={200}
+              />
+            </div>
+          )}
 
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-            <label style={{
-              fontSize: 10, fontWeight: 700, color: V.navy,
-              letterSpacing: 1.5, textTransform: 'uppercase', fontFamily: FONT.body,
-            }}>Practice</label>
-            <MultiSelectDropdown
-              label="Practice"
-              options={practices}
-              selected={selectedPractices}
-              onChange={setSelectedPractices}
-              minWidth={220}
-            />
-          </div>
+          {/* Practice dropdown: show only relevant practice(s) when pre-filtered */}
+          {!initialLocations?.length && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <label style={{
+                fontSize: 10, fontWeight: 700, color: V.navy,
+                letterSpacing: 1.5, textTransform: 'uppercase', fontFamily: FONT.body,
+              }}>Practice</label>
+              <MultiSelectDropdown
+                label="Practice"
+                options={initialPractices?.length ? initialPractices : practices}
+                selected={selectedPractices}
+                onChange={setSelectedPractices}
+                minWidth={220}
+              />
+            </div>
+          )}
 
+          {/* Location dropdown: show only relevant locations */}
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
             <label style={{
               fontSize: 10, fontWeight: 700, color: V.navy,
@@ -3328,7 +3335,7 @@ export default function PerformanceTracker({ initialLocTypes, initialPractices, 
             }}>Location</label>
             <MultiSelectDropdown
               label="Location"
-              options={locationNames}
+              options={initialLocations?.length ? initialLocations : locationNames}
               selected={globalSelectedLocs}
               onChange={setGlobalSelectedLocs}
               minWidth={220}
