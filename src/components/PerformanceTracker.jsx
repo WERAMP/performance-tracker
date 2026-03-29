@@ -1753,6 +1753,8 @@ export default function PerformanceTracker({ initialLocTypes, initialPractices, 
   const [revCollAppendixLocs, setRevCollAppendixLocs] = useState(defaultChartLoc);
   const [revCollProvAppendixProviders, setRevCollProvAppendixProviders] = useState(null);
   const [revCollProvAppendixLocs, setRevCollProvAppendixLocs] = useState([]);
+  const [revCollHoursProviders, setRevCollHoursProviders] = useState(null); // null = show total (no provider filter)
+  const [revPerHourProviders, setRevPerHourProviders] = useState(null);
 
   // Fetch all data on mount
   useEffect(() => {
@@ -3011,11 +3013,28 @@ export default function PerformanceTracker({ initialLocTypes, initialPractices, 
     return { revCollAppendixData: data, revCollAppendixSeries: series, revCollAppendixRightAxis: rightAxis };
   }, [metrics, locationNames, revCollAppendixLocs, globalTimeMode, globalPeriodCount, chartTimeOverrides]);
 
-  // ── Appendix: Revenue + Collections + Net Scheduled Provider Hours ──
+  // ── Available providers for Rev/Coll+Hours and Rev/Hour charts ──
+  const availableRevCollHoursProviders = useMemo(() => {
+    const centerNames = new Set(locationNames);
+    const clinicalSet = new Set(injRevProviderData.map(m => m.pr));
+    const provs = new Set();
+    revCollProvData.filter(m => centerNames.has(m.c) && clinicalSet.has(m.pr)).forEach(m => provs.add(m.pr));
+    return [...provs].sort();
+  }, [revCollProvData, locationNames, injRevProviderData]);
+
+  // ── Revenue + Collections + Net Scheduled Provider Hours (with optional provider filter) ──
   const { revCollHoursData, revCollHoursSeries, revCollHoursRightAxis } = useMemo(() => {
     const centerNames = new Set(locationNames);
     const filtered = metrics.filter(m => centerNames.has(m.c));
     const filteredHours = providerHoursData.filter(m => centerNames.has(m.c));
+    // Provider-filtered rev/coll data
+    const selectedProvs = revCollHoursProviders;
+    const useProvFilter = selectedProvs && selectedProvs.length > 0;
+    const provSet = useProvFilter ? new Set(selectedProvs) : null;
+    const filteredProvData = useProvFilter
+      ? revCollProvData.filter(m => centerNames.has(m.c) && provSet.has(m.pr))
+      : null;
+
     const allWeeks = [...new Set(filtered.map(m => m.w))].sort();
     const { mode: tMode, count: tCount } = getEffectiveTime('revCollHours');
     const timeRange = getTimeRange(allWeeks, tMode, tCount);
@@ -3029,8 +3048,13 @@ export default function PerformanceTracker({ initialLocTypes, initialPractices, 
 
     const buildRow = (weekKeys, label) => {
       const rows = filtered.filter(m => weekKeys.includes(m.w));
-      const totalRev = rows.reduce((s, m) => s + (m.s || 0), 0);
-      const totalColl = rows.reduce((s, m) => s + (m.co || 0), 0);
+      // If provider filter active, use provider-level data for rev/coll
+      const totalRev = useProvFilter
+        ? filteredProvData.filter(m => weekKeys.includes(m.w)).reduce((s, m) => s + (m.rev || 0), 0)
+        : rows.reduce((s, m) => s + (m.s || 0), 0);
+      const totalColl = useProvFilter
+        ? filteredProvData.filter(m => weekKeys.includes(m.w)).reduce((s, m) => s + (m.coll || 0), 0)
+        : rows.reduce((s, m) => s + (m.co || 0), 0);
       const totalHours = weekKeys.reduce((s, w) => {
         const weekHoursMap = locHoursMap[w] || {};
         return s + Object.values(weekHoursMap).reduce((ss, h) => ss + h, 0);
@@ -3074,14 +3098,22 @@ export default function PerformanceTracker({ initialLocTypes, initialPractices, 
     });
 
     return { revCollHoursData: data, revCollHoursSeries: series, revCollHoursRightAxis: rightAxis };
-  }, [metrics, providerHoursData, locationNames, revCollHoursLocs, globalTimeMode, globalPeriodCount, chartTimeOverrides]);
+  }, [metrics, providerHoursData, locationNames, revCollHoursLocs, revCollHoursProviders, revCollProvData, globalTimeMode, globalPeriodCount, chartTimeOverrides]);
 
-  // ── Appendix: Revenue/Hour, Collections/Hour, Utilization Rate ──
+  // ── Revenue/Hour, Collections/Hour, Utilization Rate (with optional provider filter) ──
   const { revPerHourChartData, revPerHourSeries, revPerHourRightAxis } = useMemo(() => {
     const centerNames = new Set(locationNames);
     const filtered = metrics.filter(m => centerNames.has(m.c));
     const filteredHours = providerHoursData.filter(m => centerNames.has(m.c));
     const filteredUtil = utilizationData.filter(m => centerNames.has(m.c));
+    // Provider-filtered rev/coll
+    const selectedProvs = revPerHourProviders;
+    const useProvFilter = selectedProvs && selectedProvs.length > 0;
+    const provSet = useProvFilter ? new Set(selectedProvs) : null;
+    const filteredProvData = useProvFilter
+      ? revCollProvData.filter(m => centerNames.has(m.c) && provSet.has(m.pr))
+      : null;
+
     const allWeeks = [...new Set(filtered.map(m => m.w))].sort();
     const { mode: tMode, count: tCount } = getEffectiveTime('revPerHour');
     const timeRange = getTimeRange(allWeeks, tMode, tCount);
@@ -3099,8 +3131,12 @@ export default function PerformanceTracker({ initialLocTypes, initialPractices, 
 
     const buildRow = (weekKeys, label) => {
       const rows = filtered.filter(m => weekKeys.includes(m.w));
-      const totalRev = rows.reduce((s, m) => s + (m.s || 0), 0);
-      const totalColl = rows.reduce((s, m) => s + (m.co || 0), 0);
+      const totalRev = useProvFilter
+        ? filteredProvData.filter(m => weekKeys.includes(m.w)).reduce((s, m) => s + (m.rev || 0), 0)
+        : rows.reduce((s, m) => s + (m.s || 0), 0);
+      const totalColl = useProvFilter
+        ? filteredProvData.filter(m => weekKeys.includes(m.w)).reduce((s, m) => s + (m.coll || 0), 0)
+        : rows.reduce((s, m) => s + (m.co || 0), 0);
       const totalHours = weekKeys.reduce((s, w) => s + Object.values(locHoursMap[w] || {}).reduce((ss, h) => ss + h, 0), 0);
       // Utilization: weighted average across locations and weeks
       let utilSum = 0, utilCount = 0;
@@ -3149,7 +3185,7 @@ export default function PerformanceTracker({ initialLocTypes, initialPractices, 
     });
 
     return { revPerHourChartData: data, revPerHourSeries: series, revPerHourRightAxis: rightAxis };
-  }, [metrics, providerHoursData, utilizationData, locationNames, revPerHourLocs, globalTimeMode, globalPeriodCount, chartTimeOverrides]);
+  }, [metrics, providerHoursData, utilizationData, locationNames, revPerHourLocs, revPerHourProviders, revCollProvData, globalTimeMode, globalPeriodCount, chartTimeOverrides]);
 
   // ── Appendix: Revenue + Collections + Coll% by Provider ──
   // Effective locations for the appendix provider chart (chart-level loc filter → top-level filter)
@@ -3815,7 +3851,7 @@ export default function PerformanceTracker({ initialLocTypes, initialPractices, 
             title="Revenue vs Collections (with Net Scheduled Provider Hours)"
             tooltip="Revenue and Collections on the left axis; Net Scheduled Provider Hours as dotted line on the right axis"
             headerRight={
-              <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+              <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
                 <ChartTimeControl chartId="revCollHours" globalMode={globalTimeMode} globalCount={globalPeriodCount} overrides={chartTimeOverrides} setOverrides={setChartTimeOverrides} />
                 {!isSingleLocation && (<MultiSelectDropdown
                   label="Location"
@@ -3824,6 +3860,13 @@ export default function PerformanceTracker({ initialLocTypes, initialPractices, 
                   onChange={setRevCollHoursLocs}
                   minWidth={85}
                 />)}
+                <MultiSelectDropdown
+                  label="Provider"
+                  options={availableRevCollHoursProviders}
+                  selected={revCollHoursProviders || availableRevCollHoursProviders}
+                  onChange={setRevCollHoursProviders}
+                  minWidth={70}
+                />
               </div>
             }
           >
@@ -3850,7 +3893,7 @@ export default function PerformanceTracker({ initialLocTypes, initialPractices, 
             title="Revenue & Collections per Provider Hour (with Utilization Rate)"
             tooltip="Revenue and Collections per net scheduled provider hour on primary axis; Utilization rate as dotted line on secondary axis"
             headerRight={
-              <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+              <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
                 <ChartTimeControl chartId="revPerHour" globalMode={globalTimeMode} globalCount={globalPeriodCount} overrides={chartTimeOverrides} setOverrides={setChartTimeOverrides} />
                 {!isSingleLocation && (<MultiSelectDropdown
                   label="Location"
@@ -3859,6 +3902,13 @@ export default function PerformanceTracker({ initialLocTypes, initialPractices, 
                   onChange={setRevPerHourLocs}
                   minWidth={85}
                 />)}
+                <MultiSelectDropdown
+                  label="Provider"
+                  options={availableRevCollHoursProviders}
+                  selected={revPerHourProviders || availableRevCollHoursProviders}
+                  onChange={setRevPerHourProviders}
+                  minWidth={70}
+                />
               </div>
             }
           >
