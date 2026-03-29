@@ -3494,7 +3494,7 @@ export default function PerformanceTracker({ initialLocTypes, initialPractices, 
                   options={['Total', ...locationNames]}
                   selected={uniquePtLocs}
                   onChange={setUniquePtLocs}
-                  minWidth={170}
+                  minWidth={85}
                 />
               </div>
             }
@@ -3519,7 +3519,7 @@ export default function PerformanceTracker({ initialLocTypes, initialPractices, 
                   options={['Total', ...locationNames]}
                   selected={avgRevLocs}
                   onChange={setAvgRevLocs}
-                  minWidth={170}
+                  minWidth={85}
                 />
               </div>
             }
@@ -3548,7 +3548,7 @@ export default function PerformanceTracker({ initialLocTypes, initialPractices, 
                   options={['Total', ...locationNames]}
                   selected={retailLocs}
                   onChange={setRetailLocs}
-                  minWidth={170}
+                  minWidth={85}
                 />
               </div>
             }
@@ -3573,7 +3573,7 @@ export default function PerformanceTracker({ initialLocTypes, initialPractices, 
                   options={['Total', ...locationNames]}
                   selected={retailPctLocs}
                   onChange={setRetailPctLocs}
-                  minWidth={170}
+                  minWidth={85}
                 />
               </div>
             }
@@ -3602,7 +3602,7 @@ export default function PerformanceTracker({ initialLocTypes, initialPractices, 
                   options={['Total', ...locationNames]}
                   selected={cancelLocs}
                   onChange={setCancelLocs}
-                  minWidth={170}
+                  minWidth={85}
                 />
               </div>
             }
@@ -3627,7 +3627,7 @@ export default function PerformanceTracker({ initialLocTypes, initialPractices, 
                   options={['Total', ...locationNames]}
                   selected={noshowLocs}
                   onChange={setNoshowLocs}
-                  minWidth={170}
+                  minWidth={85}
                 />
               </div>
             }
@@ -3656,7 +3656,7 @@ export default function PerformanceTracker({ initialLocTypes, initialPractices, 
                   options={['Total', ...locationNames]}
                   selected={utilizationLocs}
                   onChange={setUtilizationLocs}
-                  minWidth={170}
+                  minWidth={85}
                 />
               </div>
             }
@@ -3681,7 +3681,7 @@ export default function PerformanceTracker({ initialLocTypes, initialPractices, 
                   options={['Total', ...locationNames]}
                   selected={netHoursLocs}
                   onChange={setNetHoursLocs}
-                  minWidth={170}
+                  minWidth={85}
                 />
               </div>
             }
@@ -3715,7 +3715,7 @@ export default function PerformanceTracker({ initialLocTypes, initialPractices, 
                   options={['Total', ...locationNames]}
                   selected={injSalesLocs}
                   onChange={setInjSalesLocs}
-                  minWidth={170}
+                  minWidth={85}
                 />
               </div>
             }
@@ -3740,7 +3740,7 @@ export default function PerformanceTracker({ initialLocTypes, initialPractices, 
                   options={['Total', ...locationNames]}
                   selected={injPctLocs}
                   onChange={setInjPctLocs}
-                  minWidth={170}
+                  minWidth={85}
                 />
               </div>
             }
@@ -3775,7 +3775,7 @@ export default function PerformanceTracker({ initialLocTypes, initialPractices, 
                   options={['Total', ...locationNames]}
                   selected={ntxFillerLocs}
                   onChange={setNtxFillerLocs}
-                  minWidth={170}
+                  minWidth={85}
                 />
               </div>
             }
@@ -3800,7 +3800,7 @@ export default function PerformanceTracker({ initialLocTypes, initialPractices, 
                   options={availableInjProviders}
                   selected={injRevProviders || availableInjProviders}
                   onChange={setInjRevProviders}
-                  minWidth={170}
+                  minWidth={85}
                 />
               </div> : null
             }
@@ -3835,7 +3835,7 @@ export default function PerformanceTracker({ initialLocTypes, initialPractices, 
                     options={['Total', ...locationNames]}
                     selected={btxLocs}
                     onChange={setBtxLocs}
-                    minWidth={170}
+                    minWidth={85}
                   />
                 </div>
               }
@@ -3866,7 +3866,7 @@ export default function PerformanceTracker({ initialLocTypes, initialPractices, 
                   options={availableBtxProviders}
                   selected={btxProviders || availableBtxProviders}
                   onChange={setBtxProviders}
-                  minWidth={170}
+                  minWidth={85}
                 />
               </div> : null
             }
@@ -3900,7 +3900,7 @@ export default function PerformanceTracker({ initialLocTypes, initialPractices, 
                   options={['Total', ...locationNames]}
                   selected={syrInjLocs}
                   onChange={setSyrInjLocs}
-                  minWidth={170}
+                  minWidth={85}
                 />
               </div>
             }
@@ -3925,7 +3925,7 @@ export default function PerformanceTracker({ initialLocTypes, initialPractices, 
                   options={availableSyrProviders}
                   selected={syrInjProviders || availableSyrProviders}
                   onChange={setSyrInjProviders}
-                  minWidth={170}
+                  minWidth={85}
                 />
               </div> : null
             }
@@ -3959,7 +3959,7 @@ export default function PerformanceTracker({ initialLocTypes, initialPractices, 
                   options={['Total', ...locationNames]}
                   selected={syrFillerLocs}
                   onChange={setSyrFillerLocs}
-                  minWidth={170}
+                  minWidth={85}
                 />
               </div>
             }
@@ -3984,7 +3984,7 @@ export default function PerformanceTracker({ initialLocTypes, initialPractices, 
                   options={availableSyrProviders}
                   selected={syrFillerProviders || availableSyrProviders}
                   onChange={setSyrFillerProviders}
-                  minWidth={170}
+                  minWidth={85}
                 />
               </div> : null
             }
@@ -4024,7 +4024,7 @@ export default function PerformanceTracker({ initialLocTypes, initialPractices, 
                   options={['Total', ...locationNames]}
                   selected={revCollHoursLocs}
                   onChange={setRevCollHoursLocs}
-                  minWidth={170}
+                  minWidth={85}
                 />
               </div>
             }
@@ -4059,7 +4059,7 @@ export default function PerformanceTracker({ initialLocTypes, initialPractices, 
                   options={['Total', ...locationNames]}
                   selected={revPerHourLocs}
                   onChange={setRevPerHourLocs}
-                  minWidth={170}
+                  minWidth={85}
                 />
               </div>
             }
@@ -4094,14 +4094,14 @@ export default function PerformanceTracker({ initialLocTypes, initialPractices, 
                   options={locationNames}
                   selected={revCollProvAppendixLocs}
                   onChange={setRevCollProvAppendixLocs}
-                  minWidth={170}
+                  minWidth={85}
                 />
                 <MultiSelectDropdown
                   label="Provider"
                   options={availableRevCollProviders}
                   selected={revCollProvAppendixProviders || availableRevCollProviders}
                   onChange={setRevCollProvAppendixProviders}
-                  minWidth={170}
+                  minWidth={85}
                 />
               </div> : null
             }
