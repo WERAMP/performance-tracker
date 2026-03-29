@@ -3508,13 +3508,13 @@ export default function PerformanceTracker({ initialLocTypes, initialPractices, 
             headerRight={
               <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
                 <ChartTimeControl chartId="uniquePt" globalMode={globalTimeMode} globalCount={globalPeriodCount} overrides={chartTimeOverrides} setOverrides={setChartTimeOverrides} />
-                <MultiSelectDropdown
+                {!isSingleLocation && (<MultiSelectDropdown
                   label="Location"
                   options={['Total', ...locationNames]}
                   selected={uniquePtLocs}
                   onChange={setUniquePtLocs}
                   minWidth={85}
-                />
+                />)}
               </div>
             }
           >
@@ -3533,13 +3533,13 @@ export default function PerformanceTracker({ initialLocTypes, initialPractices, 
             headerRight={
               <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
                 <ChartTimeControl chartId="avgRev" globalMode={globalTimeMode} globalCount={globalPeriodCount} overrides={chartTimeOverrides} setOverrides={setChartTimeOverrides} />
-                <MultiSelectDropdown
+                {!isSingleLocation && (<MultiSelectDropdown
                   label="Location"
                   options={['Total', ...locationNames]}
                   selected={avgRevLocs}
                   onChange={setAvgRevLocs}
                   minWidth={85}
-                />
+                />)}
               </div>
             }
           >
@@ -3562,13 +3562,13 @@ export default function PerformanceTracker({ initialLocTypes, initialPractices, 
             headerRight={
               <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
                 <ChartTimeControl chartId="retail" globalMode={globalTimeMode} globalCount={globalPeriodCount} overrides={chartTimeOverrides} setOverrides={setChartTimeOverrides} />
-                <MultiSelectDropdown
+                {!isSingleLocation && (<MultiSelectDropdown
                   label="Location"
                   options={['Total', ...locationNames]}
                   selected={retailLocs}
                   onChange={setRetailLocs}
                   minWidth={85}
-                />
+                />)}
               </div>
             }
           >
@@ -3587,13 +3587,13 @@ export default function PerformanceTracker({ initialLocTypes, initialPractices, 
             headerRight={
               <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
                 <ChartTimeControl chartId="retailPct" globalMode={globalTimeMode} globalCount={globalPeriodCount} overrides={chartTimeOverrides} setOverrides={setChartTimeOverrides} />
-                <MultiSelectDropdown
+                {!isSingleLocation && (<MultiSelectDropdown
                   label="Location"
                   options={['Total', ...locationNames]}
                   selected={retailPctLocs}
                   onChange={setRetailPctLocs}
                   minWidth={85}
-                />
+                />)}
               </div>
             }
           >
@@ -3616,13 +3616,13 @@ export default function PerformanceTracker({ initialLocTypes, initialPractices, 
             headerRight={
               <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
                 <ChartTimeControl chartId="cancel" globalMode={globalTimeMode} globalCount={globalPeriodCount} overrides={chartTimeOverrides} setOverrides={setChartTimeOverrides} />
-                <MultiSelectDropdown
+                {!isSingleLocation && (<MultiSelectDropdown
                   label="Location"
                   options={['Total', ...locationNames]}
                   selected={cancelLocs}
                   onChange={setCancelLocs}
                   minWidth={85}
-                />
+                />)}
               </div>
             }
           >
@@ -3641,13 +3641,13 @@ export default function PerformanceTracker({ initialLocTypes, initialPractices, 
             headerRight={
               <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
                 <ChartTimeControl chartId="noshow" globalMode={globalTimeMode} globalCount={globalPeriodCount} overrides={chartTimeOverrides} setOverrides={setChartTimeOverrides} />
-                <MultiSelectDropdown
+                {!isSingleLocation && (<MultiSelectDropdown
                   label="Location"
                   options={['Total', ...locationNames]}
                   selected={noshowLocs}
                   onChange={setNoshowLocs}
                   minWidth={85}
-                />
+                />)}
               </div>
             }
           >
@@ -3670,13 +3670,13 @@ export default function PerformanceTracker({ initialLocTypes, initialPractices, 
             headerRight={
               <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
                 <ChartTimeControl chartId="utilization" globalMode={globalTimeMode} globalCount={globalPeriodCount} overrides={chartTimeOverrides} setOverrides={setChartTimeOverrides} />
-                <MultiSelectDropdown
+                {!isSingleLocation && (<MultiSelectDropdown
                   label="Location"
                   options={['Total', ...locationNames]}
                   selected={utilizationLocs}
                   onChange={setUtilizationLocs}
                   minWidth={85}
-                />
+                />)}
               </div>
             }
           >
@@ -3695,13 +3695,13 @@ export default function PerformanceTracker({ initialLocTypes, initialPractices, 
             headerRight={
               <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
                 <ChartTimeControl chartId="netHours" globalMode={globalTimeMode} globalCount={globalPeriodCount} overrides={chartTimeOverrides} setOverrides={setChartTimeOverrides} />
-                <MultiSelectDropdown
+                {!isSingleLocation && (<MultiSelectDropdown
                   label="Location"
                   options={['Total', ...locationNames]}
                   selected={netHoursLocs}
                   onChange={setNetHoursLocs}
                   minWidth={85}
-                />
+                />)}
               </div>
             }
           >
@@ -3734,13 +3734,13 @@ export default function PerformanceTracker({ initialLocTypes, initialPractices, 
             headerRight={
               <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
                 <ChartTimeControl chartId="injSales" globalMode={globalTimeMode} globalCount={globalPeriodCount} overrides={chartTimeOverrides} setOverrides={setChartTimeOverrides} />
-                <MultiSelectDropdown
+                {!isSingleLocation && (<MultiSelectDropdown
                   label="Location"
                   options={['Total', ...locationNames]}
                   selected={injSalesLocs}
                   onChange={setInjSalesLocs}
                   minWidth={85}
-                />
+                />)}
               </div>
             }
           >
@@ -3759,13 +3759,13 @@ export default function PerformanceTracker({ initialLocTypes, initialPractices, 
             headerRight={
               <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
                 <ChartTimeControl chartId="injPct" globalMode={globalTimeMode} globalCount={globalPeriodCount} overrides={chartTimeOverrides} setOverrides={setChartTimeOverrides} />
-                <MultiSelectDropdown
+                {!isSingleLocation && (<MultiSelectDropdown
                   label="Location"
                   options={['Total', ...locationNames]}
                   selected={injPctLocs}
                   onChange={setInjPctLocs}
                   minWidth={85}
-                />
+                />)}
               </div>
             }
           >
@@ -3799,13 +3799,13 @@ export default function PerformanceTracker({ initialLocTypes, initialPractices, 
             headerRight={
               <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
                 <ChartTimeControl chartId="ntxFiller" globalMode={globalTimeMode} globalCount={globalPeriodCount} overrides={chartTimeOverrides} setOverrides={setChartTimeOverrides} />
-                <MultiSelectDropdown
+                {!isSingleLocation && (<MultiSelectDropdown
                   label="Location"
                   options={['Total', ...locationNames]}
                   selected={ntxFillerLocs}
                   onChange={setNtxFillerLocs}
                   minWidth={85}
-                />
+                />)}
               </div>
             }
           >
@@ -3859,13 +3859,13 @@ export default function PerformanceTracker({ initialLocTypes, initialPractices, 
               headerRight={
                 <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
                   <ChartTimeControl chartId="btxLoc" globalMode={globalTimeMode} globalCount={globalPeriodCount} overrides={chartTimeOverrides} setOverrides={setChartTimeOverrides} />
-                  <MultiSelectDropdown
+                  {!isSingleLocation && (<MultiSelectDropdown
                     label="Location"
                     options={['Total', ...locationNames]}
                     selected={btxLocs}
                     onChange={setBtxLocs}
                     minWidth={85}
-                  />
+                  />)}
                 </div>
               }
             >
@@ -3924,13 +3924,13 @@ export default function PerformanceTracker({ initialLocTypes, initialPractices, 
             headerRight={
               <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
                 <ChartTimeControl chartId="syrInjLoc" globalMode={globalTimeMode} globalCount={globalPeriodCount} overrides={chartTimeOverrides} setOverrides={setChartTimeOverrides} />
-                <MultiSelectDropdown
+                {!isSingleLocation && (<MultiSelectDropdown
                   label="Location"
                   options={['Total', ...locationNames]}
                   selected={syrInjLocs}
                   onChange={setSyrInjLocs}
                   minWidth={85}
-                />
+                />)}
               </div>
             }
           >
@@ -3983,13 +3983,13 @@ export default function PerformanceTracker({ initialLocTypes, initialPractices, 
             headerRight={
               <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
                 <ChartTimeControl chartId="syrFillerLoc" globalMode={globalTimeMode} globalCount={globalPeriodCount} overrides={chartTimeOverrides} setOverrides={setChartTimeOverrides} />
-                <MultiSelectDropdown
+                {!isSingleLocation && (<MultiSelectDropdown
                   label="Location"
                   options={['Total', ...locationNames]}
                   selected={syrFillerLocs}
                   onChange={setSyrFillerLocs}
                   minWidth={85}
-                />
+                />)}
               </div>
             }
           >
@@ -4053,13 +4053,13 @@ export default function PerformanceTracker({ initialLocTypes, initialPractices, 
             headerRight={
               <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
                 <ChartTimeControl chartId="revCollHours" globalMode={globalTimeMode} globalCount={globalPeriodCount} overrides={chartTimeOverrides} setOverrides={setChartTimeOverrides} />
-                <MultiSelectDropdown
+                {!isSingleLocation && (<MultiSelectDropdown
                   label="Location"
                   options={['Total', ...locationNames]}
                   selected={revCollHoursLocs}
                   onChange={setRevCollHoursLocs}
                   minWidth={85}
-                />
+                />)}
               </div>
             }
           >
@@ -4088,13 +4088,13 @@ export default function PerformanceTracker({ initialLocTypes, initialPractices, 
             headerRight={
               <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
                 <ChartTimeControl chartId="revPerHour" globalMode={globalTimeMode} globalCount={globalPeriodCount} overrides={chartTimeOverrides} setOverrides={setChartTimeOverrides} />
-                <MultiSelectDropdown
+                {!isSingleLocation && (<MultiSelectDropdown
                   label="Location"
                   options={['Total', ...locationNames]}
                   selected={revPerHourLocs}
                   onChange={setRevPerHourLocs}
                   minWidth={85}
-                />
+                />)}
               </div>
             }
           >
@@ -4123,13 +4123,13 @@ export default function PerformanceTracker({ initialLocTypes, initialPractices, 
             headerRight={hasActiveFilter ?
               <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
                 <ChartTimeControl chartId="revCollProv" globalMode={globalTimeMode} globalCount={globalPeriodCount} overrides={chartTimeOverrides} setOverrides={setChartTimeOverrides} />
-                <MultiSelectDropdown
+                {!isSingleLocation && (<MultiSelectDropdown
                   label="Location"
                   options={locationNames}
                   selected={revCollProvAppendixLocs}
                   onChange={setRevCollProvAppendixLocs}
                   minWidth={85}
-                />
+                />)}
                 <MultiSelectDropdown
                   label="Provider"
                   options={availableRevCollProviders}
