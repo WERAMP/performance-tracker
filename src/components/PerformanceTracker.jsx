@@ -3158,10 +3158,12 @@ export default function PerformanceTracker({ initialLocTypes, initialPractices, 
 
   const availableRevCollProviders = useMemo(() => {
     const centerNames = new Set(revCollProvEffectiveLocs);
+    // Only include clinical providers (those who have injectable revenue data)
+    const clinicalProviders = new Set(injRevProviderData.map(m => m.pr));
     const provs = new Set();
-    revCollProvData.filter(m => centerNames.has(m.c)).forEach(m => provs.add(m.pr));
+    revCollProvData.filter(m => centerNames.has(m.c) && clinicalProviders.has(m.pr)).forEach(m => provs.add(m.pr));
     return [...provs].sort();
-  }, [revCollProvData, revCollProvEffectiveLocs]);
+  }, [revCollProvData, revCollProvEffectiveLocs, injRevProviderData]);
 
   // Reset provider selection when chart-level locations change
   useEffect(() => {
@@ -3172,7 +3174,8 @@ export default function PerformanceTracker({ initialLocTypes, initialPractices, 
 
   const { revCollProvChartData, revCollProvBarSeries, revCollProvLineSeries } = useMemo(() => {
     const centerNames = new Set(revCollProvEffectiveLocs);
-    const filtered = revCollProvData.filter(m => centerNames.has(m.c));
+    const clinicalSet = new Set(injRevProviderData.map(m => m.pr));
+    const filtered = revCollProvData.filter(m => centerNames.has(m.c) && clinicalSet.has(m.pr));
     const selectedProvs = revCollProvAppendixProviders || availableRevCollProviders;
     const provSet = new Set(selectedProvs);
     const allWeeks = [...new Set(filtered.map(m => m.w))].sort();
@@ -3211,7 +3214,7 @@ export default function PerformanceTracker({ initialLocTypes, initialPractices, 
       revCollProvBarSeries: activeProv,
       revCollProvLineSeries: activeProv.map(p => p + ' %'),
     };
-  }, [revCollProvData, revCollProvEffectiveLocs, revCollProvAppendixProviders, availableRevCollProviders, globalTimeMode, globalPeriodCount, chartTimeOverrides]);
+  }, [revCollProvData, revCollProvEffectiveLocs, revCollProvAppendixProviders, availableRevCollProviders, injRevProviderData, globalTimeMode, globalPeriodCount, chartTimeOverrides]);
 
   // ══════════════════════════════════════════════════════════
   //  Loading State
