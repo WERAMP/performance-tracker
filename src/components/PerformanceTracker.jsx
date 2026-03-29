@@ -1694,6 +1694,7 @@ export default function PerformanceTracker({ initialLocTypes, initialPractices, 
   const [revCollProvData, setRevCollProvData] = useState([]);
   const [providerHoursData, setProviderHoursData] = useState([]);
   const [utilizationData, setUtilizationData] = useState([]);
+  const [metricsProviderData, setMetricsProviderData] = useState([]);
   const [loading, setLoading] = useState(true);
 
   const [selectedLocTypes, setSelectedLocTypes] = useState(initialLocTypes || []);
@@ -1779,7 +1780,8 @@ export default function PerformanceTracker({ initialLocTypes, initialPractices, 
       fetch('/data/performance/weekly-rev-coll-provider.json').then(r => r.json()).catch(() => []),
       fetch('/data/performance/weekly-provider-hours.json').then(r => r.json()).catch(() => []),
       fetch('/data/performance/weekly-utilization.json').then(r => r.json()).catch(() => []),
-    ]).then(([locs, met, ops, btx, bud, injRevProv, btxProv, ntxFiller, syrLoc, syrProv, revCollProv, provHours, utilization]) => {
+      fetch('/data/performance/weekly-metrics-provider.json').then(r => r.json()).catch(() => []),
+    ]).then(([locs, met, ops, btx, bud, injRevProv, btxProv, ntxFiller, syrLoc, syrProv, revCollProv, provHours, utilization, metricsProvData]) => {
       setLocations(locs);
       setMetrics(met);
       setOpsData(ops);
@@ -1793,6 +1795,7 @@ export default function PerformanceTracker({ initialLocTypes, initialPractices, 
       setRevCollProvData(revCollProv);
       setProviderHoursData(provHours);
       setUtilizationData(utilization);
+      setMetricsProviderData(metricsProvData);
       setLoading(false);
       // Mark data as loaded so cleanup effects can run
       // Use a timeout to let the first render with data settle before enabling cleanup
@@ -1984,9 +1987,52 @@ export default function PerformanceTracker({ initialLocTypes, initialPractices, 
   //  Chart data transformations
   // ══════════════════════════════════════════════════════════
 
-  // ── Avg Revenue Per Patient (weighted average Total + per-location) ──
-  const { avgRevData, avgRevSeries } = useMemo(() => {
+  // ── Avg Revenue Per Patient (weighted average Total + per-location, or per-provider) ──
+  const { avgRevData, avgRevSeries, avgRevIsProviderMode } = useMemo(() => {
     const centerNames = new Set(locationNames);
+    const useProvFilter = isSingleLocation && avgRevProviders && avgRevProviders.length > 0 && avgRevProviders.length < availableInjProviders.length;
+
+    if (useProvFilter) {
+      // Provider-level mode: show each selected provider as a separate line
+      const provSet = new Set(avgRevProviders);
+      const filtered = metricsProviderData.filter(m => centerNames.has(m.c) && provSet.has(m.pr));
+      const allWeeks = [...new Set(filtered.map(m => m.w))].sort();
+      const { mode: tMode, count: tCount } = getEffectiveTime('avgRev');
+      const timeRange = getTimeRange(allWeeks, tMode, tCount);
+      const selectedProvs = [...provSet].sort();
+
+      if (!timeRange.isMonthly) {
+        const data = timeRange.periods.map(w => {
+          const row = { week: formatWeek(w) };
+          const weekRows = filtered.filter(m => m.w === w);
+          selectedProvs.forEach(pr => {
+            const provRows = weekRows.filter(m => m.pr === pr);
+            const sales = provRows.reduce((s, m) => s + (m.s || 0), 0);
+            const patients = provRows.reduce((s, m) => s + (m.p || 0), 0);
+            if (patients > 0) row[pr] = +(sales / patients).toFixed(2);
+          });
+          return row;
+        });
+        return { avgRevData: data, avgRevSeries: selectedProvs, avgRevIsProviderMode: true };
+      } else {
+        const today = new Date();
+        const curMonth = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}`;
+        const data = timeRange.periods.map(mk => {
+          const row = { week: formatMonth(mk, mk === curMonth) };
+          const monthRows = filtered.filter(m => m.w.startsWith(mk));
+          selectedProvs.forEach(pr => {
+            const provRows = monthRows.filter(m => m.pr === pr);
+            const sales = provRows.reduce((s, m) => s + (m.s || 0), 0);
+            const patients = provRows.reduce((s, m) => s + (m.p || 0), 0);
+            if (patients > 0) row[pr] = +(sales / patients).toFixed(2);
+          });
+          return row;
+        });
+        return { avgRevData: data, avgRevSeries: selectedProvs, avgRevIsProviderMode: true };
+      }
+    }
+
+    // Location-level mode (default)
     const filtered = metrics.filter(m => centerNames.has(m.c));
     const allWeeks = [...new Set(filtered.map(m => m.w))].sort();
     const { mode: tMode, count: tCount } = getEffectiveTime('avgRev');
@@ -2006,7 +2052,7 @@ export default function PerformanceTracker({ initialLocTypes, initialPractices, 
         return row;
       });
       const locs = avgRevLocs.filter(n => n !== 'Total');
-      return { avgRevData: data, avgRevSeries: [...(avgRevLocs.includes('Total') ? ['Total'] : []), ...locs] };
+      return { avgRevData: data, avgRevSeries: [...(avgRevLocs.includes('Total') ? ['Total'] : []), ...locs], avgRevIsProviderMode: false };
     } else {
       const months = timeRange.periods;
       const today = new Date();
@@ -2025,13 +2071,51 @@ export default function PerformanceTracker({ initialLocTypes, initialPractices, 
         return row;
       });
       const locs = avgRevLocs.filter(n => n !== 'Total');
-      return { avgRevData: data, avgRevSeries: [...(avgRevLocs.includes('Total') ? ['Total'] : []), ...locs] };
+      return { avgRevData: data, avgRevSeries: [...(avgRevLocs.includes('Total') ? ['Total'] : []), ...locs], avgRevIsProviderMode: false };
     }
-  }, [metrics, locationNames, avgRevLocs, globalTimeMode, globalPeriodCount, chartTimeOverrides]);
+  }, [metrics, metricsProviderData, locationNames, avgRevLocs, avgRevProviders, isSingleLocation, availableInjProviders, globalTimeMode, globalPeriodCount, chartTimeOverrides]);
 
-  // ── Unique Patients (sum Total + per-location) ──
-  const { uniquePtData, uniquePtSeries } = useMemo(() => {
+  // ── Unique Patients (sum Total + per-location, or per-provider) ──
+  const { uniquePtData, uniquePtSeries, uniquePtIsProviderMode } = useMemo(() => {
     const centerNames = new Set(locationNames);
+    const useProvFilter = isSingleLocation && uniquePtProviders && uniquePtProviders.length > 0 && uniquePtProviders.length < availableInjProviders.length;
+
+    if (useProvFilter) {
+      const provSet = new Set(uniquePtProviders);
+      const filtered = metricsProviderData.filter(m => centerNames.has(m.c) && provSet.has(m.pr));
+      const allWeeks = [...new Set(filtered.map(m => m.w))].sort();
+      const { mode: tMode, count: tCount } = getEffectiveTime('uniquePt');
+      const timeRange = getTimeRange(allWeeks, tMode, tCount);
+      const selectedProvs = [...provSet].sort();
+
+      if (!timeRange.isMonthly) {
+        const data = timeRange.periods.map(w => {
+          const row = { week: formatWeek(w) };
+          const weekRows = filtered.filter(m => m.w === w);
+          selectedProvs.forEach(pr => {
+            const provRows = weekRows.filter(m => m.pr === pr);
+            row[pr] = provRows.reduce((s, m) => s + (m.p || 0), 0);
+          });
+          return row;
+        });
+        return { uniquePtData: data, uniquePtSeries: selectedProvs, uniquePtIsProviderMode: true };
+      } else {
+        const today = new Date();
+        const curMonth = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}`;
+        const data = timeRange.periods.map(mk => {
+          const row = { week: formatMonth(mk, mk === curMonth) };
+          const monthRows = filtered.filter(m => m.w.startsWith(mk));
+          selectedProvs.forEach(pr => {
+            const provRows = monthRows.filter(m => m.pr === pr);
+            row[pr] = provRows.reduce((s, m) => s + (m.p || 0), 0);
+          });
+          return row;
+        });
+        return { uniquePtData: data, uniquePtSeries: selectedProvs, uniquePtIsProviderMode: true };
+      }
+    }
+
+    // Location-level mode (default)
     const filtered = metrics.filter(m => centerNames.has(m.c));
     const allWeeks = [...new Set(filtered.map(m => m.w))].sort();
     const { mode: tMode, count: tCount } = getEffectiveTime('uniquePt');
@@ -2049,7 +2133,7 @@ export default function PerformanceTracker({ initialLocTypes, initialPractices, 
         return row;
       });
       const locs = uniquePtLocs.filter(n => n !== 'Total');
-      return { uniquePtData: data, uniquePtSeries: [...(uniquePtLocs.includes('Total') ? ['Total'] : []), ...locs] };
+      return { uniquePtData: data, uniquePtSeries: [...(uniquePtLocs.includes('Total') ? ['Total'] : []), ...locs], uniquePtIsProviderMode: false };
     } else {
       const months = timeRange.periods;
       const today = new Date();
@@ -2064,13 +2148,51 @@ export default function PerformanceTracker({ initialLocTypes, initialPractices, 
         return row;
       });
       const locs = uniquePtLocs.filter(n => n !== 'Total');
-      return { uniquePtData: data, uniquePtSeries: [...(uniquePtLocs.includes('Total') ? ['Total'] : []), ...locs] };
+      return { uniquePtData: data, uniquePtSeries: [...(uniquePtLocs.includes('Total') ? ['Total'] : []), ...locs], uniquePtIsProviderMode: false };
     }
-  }, [metrics, locationNames, uniquePtLocs, globalTimeMode, globalPeriodCount, chartTimeOverrides]);
+  }, [metrics, metricsProviderData, locationNames, uniquePtLocs, uniquePtProviders, isSingleLocation, availableInjProviders, globalTimeMode, globalPeriodCount, chartTimeOverrides]);
 
-  // ── Retail Sales (sum Total + per-location) ──
-  const { retailData, retailSeries } = useMemo(() => {
+  // ── Retail Sales (sum Total + per-location, or per-provider) ──
+  const { retailData, retailSeries, retailIsProviderMode } = useMemo(() => {
     const centerNames = new Set(locationNames);
+    const useProvFilter = isSingleLocation && retailProviders && retailProviders.length > 0 && retailProviders.length < availableInjProviders.length;
+
+    if (useProvFilter) {
+      const provSet = new Set(retailProviders);
+      const filtered = metricsProviderData.filter(m => centerNames.has(m.c) && provSet.has(m.pr));
+      const allWeeks = [...new Set(filtered.map(m => m.w))].sort();
+      const { mode: tMode, count: tCount } = getEffectiveTime('retail');
+      const timeRange = getTimeRange(allWeeks, tMode, tCount);
+      const selectedProvs = [...provSet].sort();
+
+      if (!timeRange.isMonthly) {
+        const data = timeRange.periods.map(w => {
+          const row = { week: formatWeek(w) };
+          const weekRows = filtered.filter(m => m.w === w);
+          selectedProvs.forEach(pr => {
+            const provRows = weekRows.filter(m => m.pr === pr);
+            row[pr] = provRows.reduce((s, m) => s + (m.rt || 0), 0);
+          });
+          return row;
+        });
+        return { retailData: data, retailSeries: selectedProvs, retailIsProviderMode: true };
+      } else {
+        const today = new Date();
+        const curMonth = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}`;
+        const data = timeRange.periods.map(mk => {
+          const row = { week: formatMonth(mk, mk === curMonth) };
+          const monthRows = filtered.filter(m => m.w.startsWith(mk));
+          selectedProvs.forEach(pr => {
+            const provRows = monthRows.filter(m => m.pr === pr);
+            row[pr] = provRows.reduce((s, m) => s + (m.rt || 0), 0);
+          });
+          return row;
+        });
+        return { retailData: data, retailSeries: selectedProvs, retailIsProviderMode: true };
+      }
+    }
+
+    // Location-level mode (default)
     const filtered = metrics.filter(m => centerNames.has(m.c));
     const allWeeks = [...new Set(filtered.map(m => m.w))].sort();
     const { mode: tMode, count: tCount } = getEffectiveTime('retail');
@@ -2088,7 +2210,7 @@ export default function PerformanceTracker({ initialLocTypes, initialPractices, 
         return row;
       });
       const locs = retailLocs.filter(n => n !== 'Total');
-      return { retailData: data, retailSeries: [...(retailLocs.includes('Total') ? ['Total'] : []), ...locs] };
+      return { retailData: data, retailSeries: [...(retailLocs.includes('Total') ? ['Total'] : []), ...locs], retailIsProviderMode: false };
     } else {
       const months = timeRange.periods;
       const today = new Date();
@@ -2103,13 +2225,55 @@ export default function PerformanceTracker({ initialLocTypes, initialPractices, 
         return row;
       });
       const locs = retailLocs.filter(n => n !== 'Total');
-      return { retailData: data, retailSeries: [...(retailLocs.includes('Total') ? ['Total'] : []), ...locs] };
+      return { retailData: data, retailSeries: [...(retailLocs.includes('Total') ? ['Total'] : []), ...locs], retailIsProviderMode: false };
     }
-  }, [metrics, locationNames, retailLocs, globalTimeMode, globalPeriodCount, chartTimeOverrides]);
+  }, [metrics, metricsProviderData, locationNames, retailLocs, retailProviders, isSingleLocation, availableInjProviders, globalTimeMode, globalPeriodCount, chartTimeOverrides]);
 
-  // ── Retail % of Total Sales (weighted average Total + per-location) ──
-  const { retailPctData, retailPctSeries } = useMemo(() => {
+  // ── Retail % of Total Sales (weighted average Total + per-location, or per-provider) ──
+  const { retailPctData, retailPctSeries, retailPctIsProviderMode } = useMemo(() => {
     const centerNames = new Set(locationNames);
+    const useProvFilter = isSingleLocation && retailPctProviders && retailPctProviders.length > 0 && retailPctProviders.length < availableInjProviders.length;
+
+    if (useProvFilter) {
+      const provSet = new Set(retailPctProviders);
+      const filtered = metricsProviderData.filter(m => centerNames.has(m.c) && provSet.has(m.pr));
+      const allWeeks = [...new Set(filtered.map(m => m.w))].sort();
+      const { mode: tMode, count: tCount } = getEffectiveTime('retailPct');
+      const timeRange = getTimeRange(allWeeks, tMode, tCount);
+      const selectedProvs = [...provSet].sort();
+
+      if (!timeRange.isMonthly) {
+        const data = timeRange.periods.map(w => {
+          const row = { week: formatWeek(w) };
+          const weekRows = filtered.filter(m => m.w === w);
+          selectedProvs.forEach(pr => {
+            const provRows = weekRows.filter(m => m.pr === pr);
+            const sales = provRows.reduce((s, m) => s + (m.s || 0), 0);
+            const retail = provRows.reduce((s, m) => s + (m.rt || 0), 0);
+            if (sales > 0) row[pr] = +((retail / sales) * 100).toFixed(1);
+          });
+          return row;
+        });
+        return { retailPctData: data, retailPctSeries: selectedProvs, retailPctIsProviderMode: true };
+      } else {
+        const today = new Date();
+        const curMonth = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}`;
+        const data = timeRange.periods.map(mk => {
+          const row = { week: formatMonth(mk, mk === curMonth) };
+          const monthRows = filtered.filter(m => m.w.startsWith(mk));
+          selectedProvs.forEach(pr => {
+            const provRows = monthRows.filter(m => m.pr === pr);
+            const sales = provRows.reduce((s, m) => s + (m.s || 0), 0);
+            const retail = provRows.reduce((s, m) => s + (m.rt || 0), 0);
+            if (sales > 0) row[pr] = +((retail / sales) * 100).toFixed(1);
+          });
+          return row;
+        });
+        return { retailPctData: data, retailPctSeries: selectedProvs, retailPctIsProviderMode: true };
+      }
+    }
+
+    // Location-level mode (default)
     const filtered = metrics.filter(m => centerNames.has(m.c));
     const allWeeks = [...new Set(filtered.map(m => m.w))].sort();
     const { mode: tMode, count: tCount } = getEffectiveTime('retailPct');
@@ -2129,7 +2293,7 @@ export default function PerformanceTracker({ initialLocTypes, initialPractices, 
         return row;
       });
       const locs = retailPctLocs.filter(n => n !== 'Total');
-      return { retailPctData: data, retailPctSeries: [...(retailPctLocs.includes('Total') ? ['Total'] : []), ...locs] };
+      return { retailPctData: data, retailPctSeries: [...(retailPctLocs.includes('Total') ? ['Total'] : []), ...locs], retailPctIsProviderMode: false };
     } else {
       const months = timeRange.periods;
       const today = new Date();
@@ -2148,9 +2312,9 @@ export default function PerformanceTracker({ initialLocTypes, initialPractices, 
         return row;
       });
       const locs = retailPctLocs.filter(n => n !== 'Total');
-      return { retailPctData: data, retailPctSeries: [...(retailPctLocs.includes('Total') ? ['Total'] : []), ...locs] };
+      return { retailPctData: data, retailPctSeries: [...(retailPctLocs.includes('Total') ? ['Total'] : []), ...locs], retailPctIsProviderMode: false };
     }
-  }, [metrics, locationNames, retailPctLocs, globalTimeMode, globalPeriodCount, chartTimeOverrides]);
+  }, [metrics, metricsProviderData, locationNames, retailPctLocs, retailPctProviders, isSingleLocation, availableInjProviders, globalTimeMode, globalPeriodCount, chartTimeOverrides]);
 
   // ── Injectables Sales (sum Total + per-location) ──
   const { injSalesData, injSalesSeries } = useMemo(() => {
@@ -3609,8 +3773,8 @@ export default function PerformanceTracker({ initialLocTypes, initialPractices, 
               series={uniquePtSeries}
               height={300}
               formatter={(v) => v?.toLocaleString()}
-              colorMap={{ Total: V.gold, ...locationColorMap }}
-              rightAxisSeries={uniquePtLocs.filter(n => n !== 'Total')}
+              colorMap={uniquePtIsProviderMode ? providerColorMap : { Total: V.gold, ...locationColorMap }}
+              rightAxisSeries={uniquePtIsProviderMode ? [] : uniquePtLocs.filter(n => n !== 'Total')}
             />
           </ChartCard>
           <ChartCard
@@ -3641,8 +3805,8 @@ export default function PerformanceTracker({ initialLocTypes, initialPractices, 
               series={avgRevSeries}
               height={300}
               formatter={fmtDollar}
-              colorMap={{ Total: V.gold, ...locationColorMap }}
-              rightAxisSeries={avgRevLocs.filter(n => n !== 'Total')}
+              colorMap={avgRevIsProviderMode ? providerColorMap : { Total: V.gold, ...locationColorMap }}
+              rightAxisSeries={avgRevIsProviderMode ? [] : avgRevLocs.filter(n => n !== 'Total')}
             />
           </ChartCard>
         </div>
@@ -3677,8 +3841,8 @@ export default function PerformanceTracker({ initialLocTypes, initialPractices, 
               series={retailSeries}
               height={300}
               formatter={fmtK}
-              colorMap={{ Total: V.gold, ...locationColorMap }}
-              rightAxisSeries={retailLocs.filter(n => n !== 'Total')}
+              colorMap={retailIsProviderMode ? providerColorMap : { Total: V.gold, ...locationColorMap }}
+              rightAxisSeries={retailIsProviderMode ? [] : retailLocs.filter(n => n !== 'Total')}
             />
           </ChartCard>
           <ChartCard
@@ -3709,8 +3873,8 @@ export default function PerformanceTracker({ initialLocTypes, initialPractices, 
               series={retailPctSeries}
               height={300}
               formatter={fmtPct}
-              colorMap={{ Total: V.gold, ...locationColorMap }}
-              rightAxisSeries={retailPctLocs.filter(n => n !== 'Total')}
+              colorMap={retailPctIsProviderMode ? providerColorMap : { Total: V.gold, ...locationColorMap }}
+              rightAxisSeries={retailPctIsProviderMode ? [] : retailPctLocs.filter(n => n !== 'Total')}
             />
           </ChartCard>
         </div>
