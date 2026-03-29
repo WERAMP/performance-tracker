@@ -1680,7 +1680,7 @@ function LocationReport({ location, locations, metrics, opsData, btxData, syring
 //  Main Component
 // ══════════════════════════════════════════════════════════════
 
-export default function PerformanceTracker() {
+export default function PerformanceTracker({ initialLocTypes, initialPractices, initialLocations }) {
   const [locations, setLocations] = useState([]);
   const [metrics, setMetrics] = useState([]);
   const [opsData, setOpsData] = useState([]);
@@ -1696,9 +1696,9 @@ export default function PerformanceTracker() {
   const [utilizationData, setUtilizationData] = useState([]);
   const [loading, setLoading] = useState(true);
 
-  const [selectedLocTypes, setSelectedLocTypes] = useState([]);
-  const [selectedPractices, setSelectedPractices] = useState([]);
-  const [globalSelectedLocs, setGlobalSelectedLocs] = useState([]);
+  const [selectedLocTypes, setSelectedLocTypes] = useState(initialLocTypes || []);
+  const [selectedPractices, setSelectedPractices] = useState(initialPractices || []);
+  const [globalSelectedLocs, setGlobalSelectedLocs] = useState(initialLocations || []);
   const [injRevProviders, setInjRevProviders] = useState([]); // empty = no providers selected
   const [btxProviders, setBtxProviders] = useState([]); // empty = no providers selected
   const TOTAL = 'Total';
