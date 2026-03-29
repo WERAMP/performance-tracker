@@ -2433,9 +2433,15 @@ export default function PerformanceTracker({ initialLocTypes, initialPractices, 
         locWeekMap[m.w][m.c] = (locWeekMap[m.w][m.c] || 0) + (m.s || 0);
       }
     });
+    // Budget: scope to the locations actually shown on the chart
+    // If "Total" is selected, sum all filtered locations' budgets
+    // If specific locations are selected, only sum those locations' budgets
     const budgetWeekMap = {};
     if (budgetData.length) {
-      const budgetFiltered = budgetData.filter(b => centerNames.has(b.c));
+      const budgetCenterNames = revChartLocs.includes('Total')
+        ? centerNames
+        : new Set(revChartLocs.filter(n => n !== 'Total'));
+      const budgetFiltered = budgetData.filter(b => budgetCenterNames.has(b.c));
       budgetFiltered.forEach(b => {
         if (!budgetWeekMap[b.w]) budgetWeekMap[b.w] = 0;
         budgetWeekMap[b.w] += (b.b || 0);
