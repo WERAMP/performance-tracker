@@ -1701,10 +1701,10 @@ export default function PerformanceTracker({ initialLocTypes, initialPractices, 
   const [globalSelectedLocs, setGlobalSelectedLocs] = useState(initialLocations || []);
   const hasInitialFilter = !!(initialLocTypes?.length || initialPractices?.length || initialLocations?.length);
   const dataLoadedRef = useRef(false);
-  const [injRevProviders, setInjRevProviders] = useState([]); // empty = no providers selected
-  const [btxProviders, setBtxProviders] = useState([]); // empty = no providers selected
   const TOTAL = 'Total';
   const isSingleLocation = initialLocations?.length === 1;
+  const [injRevProviders, setInjRevProviders] = useState(isSingleLocation ? null : []); // null = auto-select all, [] = empty
+  const [btxProviders, setBtxProviders] = useState(isSingleLocation ? null : []);
   // For single-location views, default chart dropdowns to show that location's data (not "Total")
   const defaultChartLoc = isSingleLocation ? initialLocations : [TOTAL];
   const [globalTimeMode, setGlobalTimeMode] = useState('weekly');
@@ -3829,7 +3829,7 @@ export default function PerformanceTracker({ initialLocTypes, initialPractices, 
                   options={availableInjProviders}
                   selected={injRevProviders || availableInjProviders}
                   onChange={setInjRevProviders}
-                  minWidth={85}
+                  minWidth={70}
                 />
               </div> : null
             }
@@ -3895,7 +3895,7 @@ export default function PerformanceTracker({ initialLocTypes, initialPractices, 
                   options={availableBtxProviders}
                   selected={btxProviders || availableBtxProviders}
                   onChange={setBtxProviders}
-                  minWidth={85}
+                  minWidth={70}
                 />
               </div> : null
             }
@@ -3954,7 +3954,7 @@ export default function PerformanceTracker({ initialLocTypes, initialPractices, 
                   options={availableSyrProviders}
                   selected={syrInjProviders || availableSyrProviders}
                   onChange={setSyrInjProviders}
-                  minWidth={85}
+                  minWidth={70}
                 />
               </div> : null
             }
@@ -4013,7 +4013,7 @@ export default function PerformanceTracker({ initialLocTypes, initialPractices, 
                   options={availableSyrProviders}
                   selected={syrFillerProviders || availableSyrProviders}
                   onChange={setSyrFillerProviders}
-                  minWidth={85}
+                  minWidth={70}
                 />
               </div> : null
             }
@@ -4135,7 +4135,7 @@ export default function PerformanceTracker({ initialLocTypes, initialPractices, 
                   options={availableRevCollProviders}
                   selected={revCollProvAppendixProviders || availableRevCollProviders}
                   onChange={setRevCollProvAppendixProviders}
-                  minWidth={85}
+                  minWidth={70}
                 />
               </div> : null
             }
