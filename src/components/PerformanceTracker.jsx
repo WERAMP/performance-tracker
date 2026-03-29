@@ -3791,6 +3791,76 @@ export default function PerformanceTracker({ initialLocTypes, initialPractices, 
         </div>
         <div style={{ display: sectionsMinimized.section4 ? 'none' : 'block' }}>
 
+        {/* Revenue vs Collections with Net Scheduled Provider Hours */}
+        <div style={{ marginBottom: 24 }}>
+          <ChartCard
+            title="Revenue vs Collections (with Net Scheduled Provider Hours)"
+            tooltip="Revenue and Collections on the left axis; Net Scheduled Provider Hours as dotted line on the right axis"
+            headerRight={
+              <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                <ChartTimeControl chartId="revCollHours" globalMode={globalTimeMode} globalCount={globalPeriodCount} overrides={chartTimeOverrides} setOverrides={setChartTimeOverrides} />
+                {!isSingleLocation && (<MultiSelectDropdown
+                  label="Location"
+                  options={['Total', ...locationNames]}
+                  selected={revCollHoursLocs}
+                  onChange={setRevCollHoursLocs}
+                  minWidth={85}
+                />)}
+              </div>
+            }
+          >
+            <MultiLineChart
+              data={revCollHoursData}
+              series={revCollHoursSeries}
+              height={380}
+              formatter={fmtK}
+              rightAxisFormatter={(v) => v != null ? `${v.toLocaleString()} hrs` : ''}
+              colorMap={{
+                'Revenue': V.gold,
+                'Collections': V.navy,
+                'Net Sched Hours': '#4A7C6F',
+                ...locationColorMap,
+              }}
+              rightAxisSeries={revCollHoursRightAxis || []}
+            />
+          </ChartCard>
+        </div>
+
+        {/* Revenue & Collections per Provider Hour with Utilization Rate */}
+        <div style={{ marginBottom: 24 }}>
+          <ChartCard
+            title="Revenue & Collections per Provider Hour (with Utilization Rate)"
+            tooltip="Revenue and Collections per net scheduled provider hour on primary axis; Utilization rate as dotted line on secondary axis"
+            headerRight={
+              <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                <ChartTimeControl chartId="revPerHour" globalMode={globalTimeMode} globalCount={globalPeriodCount} overrides={chartTimeOverrides} setOverrides={setChartTimeOverrides} />
+                {!isSingleLocation && (<MultiSelectDropdown
+                  label="Location"
+                  options={['Total', ...locationNames]}
+                  selected={revPerHourLocs}
+                  onChange={setRevPerHourLocs}
+                  minWidth={85}
+                />)}
+              </div>
+            }
+          >
+            <MultiLineChart
+              data={revPerHourChartData}
+              series={revPerHourSeries}
+              height={380}
+              formatter={fmtDollar}
+              rightAxisFormatter={fmtPct}
+              colorMap={{
+                'Rev / Hour': V.gold,
+                'Coll / Hour': V.navy,
+                'Utilization %': V.green,
+                ...locationColorMap,
+              }}
+              rightAxisSeries={revPerHourRightAxis || []}
+            />
+          </ChartCard>
+        </div>
+
         {/* NTX vs Filler placeholder + Injectables Rev by Provider */}
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 24, marginBottom: 24 }}>
           <ChartCard
@@ -4044,76 +4114,6 @@ export default function PerformanceTracker({ initialLocTypes, initialPractices, 
           <SectionSeparator number="A" title={`Appendix ${sectionsMinimized.appendix ? '▸' : ''}`} />
         </div>
         <div style={{ display: sectionsMinimized.appendix ? 'none' : 'block' }}>
-
-        {/* Revenue vs Collections with Net Scheduled Provider Hours on secondary axis */}
-        <div style={{ marginBottom: 24 }}>
-          <ChartCard
-            title="Revenue vs Collections (with Net Scheduled Provider Hours)"
-            tooltip="Revenue and Collections on the left axis; Total Net Scheduled Provider Hours shown as a dotted line on the right axis"
-            headerRight={
-              <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-                <ChartTimeControl chartId="revCollHours" globalMode={globalTimeMode} globalCount={globalPeriodCount} overrides={chartTimeOverrides} setOverrides={setChartTimeOverrides} />
-                {!isSingleLocation && (<MultiSelectDropdown
-                  label="Location"
-                  options={['Total', ...locationNames]}
-                  selected={revCollHoursLocs}
-                  onChange={setRevCollHoursLocs}
-                  minWidth={85}
-                />)}
-              </div>
-            }
-          >
-            <MultiLineChart
-              data={revCollHoursData}
-              series={revCollHoursSeries}
-              height={380}
-              formatter={fmtK}
-              rightAxisFormatter={(v) => v != null ? `${v.toLocaleString()} hrs` : ''}
-              colorMap={{
-                'Revenue': V.gold,
-                'Collections': V.navy,
-                'Net Sched Hours': '#4A7C6F',
-                ...locationColorMap,
-              }}
-              rightAxisSeries={revCollHoursRightAxis || []}
-            />
-          </ChartCard>
-        </div>
-
-        {/* Revenue per Hour, Collections per Hour, Utilization Rate */}
-        <div style={{ marginBottom: 24 }}>
-          <ChartCard
-            title="Revenue & Collections per Provider Hour (with Utilization Rate)"
-            tooltip="Revenue and Collections per net scheduled provider hour on primary axis; Utilization rate as dotted line on secondary axis"
-            headerRight={
-              <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-                <ChartTimeControl chartId="revPerHour" globalMode={globalTimeMode} globalCount={globalPeriodCount} overrides={chartTimeOverrides} setOverrides={setChartTimeOverrides} />
-                {!isSingleLocation && (<MultiSelectDropdown
-                  label="Location"
-                  options={['Total', ...locationNames]}
-                  selected={revPerHourLocs}
-                  onChange={setRevPerHourLocs}
-                  minWidth={85}
-                />)}
-              </div>
-            }
-          >
-            <MultiLineChart
-              data={revPerHourChartData}
-              series={revPerHourSeries}
-              height={380}
-              formatter={fmtDollar}
-              rightAxisFormatter={fmtPct}
-              colorMap={{
-                'Rev / Hour': V.gold,
-                'Coll / Hour': V.navy,
-                'Utilization %': V.green,
-                ...locationColorMap,
-              }}
-              rightAxisSeries={revPerHourRightAxis || []}
-            />
-          </ChartCard>
-        </div>
 
         {/* Revenue vs Collections by Provider */}
         <div style={{ marginBottom: 24 }}>
