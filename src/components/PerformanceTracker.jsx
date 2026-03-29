@@ -1699,6 +1699,8 @@ export default function PerformanceTracker({ initialLocTypes, initialPractices, 
   const [selectedLocTypes, setSelectedLocTypes] = useState(initialLocTypes || []);
   const [selectedPractices, setSelectedPractices] = useState(initialPractices || []);
   const [globalSelectedLocs, setGlobalSelectedLocs] = useState(initialLocations || []);
+  const hasInitialFilter = !!(initialLocTypes?.length || initialPractices?.length || initialLocations?.length);
+  const dataLoadedRef = useRef(false);
   const [injRevProviders, setInjRevProviders] = useState([]); // empty = no providers selected
   const [btxProviders, setBtxProviders] = useState([]); // empty = no providers selected
   const TOTAL = 'Total';
@@ -1770,6 +1772,9 @@ export default function PerformanceTracker({ initialLocTypes, initialPractices, 
       setProviderHoursData(provHours);
       setUtilizationData(utilization);
       setLoading(false);
+      // Mark data as loaded so cleanup effects can run
+      // Use a timeout to let the first render with data settle before enabling cleanup
+      setTimeout(() => { dataLoadedRef.current = true; }, 100);
     });
   }, []);
 
@@ -1795,8 +1800,9 @@ export default function PerformanceTracker({ initialLocTypes, initialPractices, 
     return [...new Set(pool.map(l => l.practice))].sort();
   }, [locations, selectedLocTypes]);
 
-  // Clear practice selections that are no longer available
+  // Clear practice selections that are no longer available (skip before data loads with initial filters)
   useEffect(() => {
+    if (hasInitialFilter && !dataLoadedRef.current) return;
     setSelectedPractices(prev => prev.filter(p => practices.includes(p)));
   }, [practices]);
 
@@ -1828,8 +1834,9 @@ export default function PerformanceTracker({ initialLocTypes, initialPractices, 
     setRevCollAppendixLocs, setRevCollHoursLocs,
   ];
 
-  // Clear chart-level location picks when top filters change
+  // Clear chart-level location picks when top filters change (skip before data loads with initial filters)
   useEffect(() => {
+    if (hasInitialFilter && !dataLoadedRef.current) return;
     const filterStale = (setter) => setter(prev => prev.filter(n => n === 'Total' || locationNames.includes(n)));
     allChartSetters.forEach(filterStale);
     // Also clear global selections that are no longer in filtered locations
