@@ -1755,6 +1755,13 @@ export default function PerformanceTracker({ initialLocTypes, initialPractices, 
   const [revCollProvAppendixLocs, setRevCollProvAppendixLocs] = useState([]);
   const [revCollHoursProviders, setRevCollHoursProviders] = useState(null); // null = show total (no provider filter)
   const [revPerHourProviders, setRevPerHourProviders] = useState(null);
+  const [uniquePtProviders, setUniquePtProviders] = useState(null);
+  const [avgRevProviders, setAvgRevProviders] = useState(null);
+  const [retailProviders, setRetailProviders] = useState(null);
+  const [retailPctProviders, setRetailPctProviders] = useState(null);
+  const [utilProviders, setUtilProviders] = useState(null);
+  const [cancelProviders, setCancelProviders] = useState(null);
+  const [noshowProviders, setNoshowProviders] = useState(null);
 
   // Fetch all data on mount
   useEffect(() => {
@@ -1865,12 +1872,30 @@ export default function PerformanceTracker({ initialLocTypes, initialPractices, 
       setSyrInjProviders(null);
       setSyrFillerProviders(null);
       setRevCollProvAppendixProviders(null);
+      setRevCollHoursProviders(null);
+      setRevPerHourProviders(null);
+      setUniquePtProviders(null);
+      setAvgRevProviders(null);
+      setRetailProviders(null);
+      setRetailPctProviders(null);
+      setUtilProviders(null);
+      setCancelProviders(null);
+      setNoshowProviders(null);
     } else {
       setInjRevProviders([]);    // empty = no providers, chart shows message
       setBtxProviders([]);
       setSyrInjProviders([]);
       setSyrFillerProviders([]);
       setRevCollProvAppendixProviders([]);
+      setRevCollHoursProviders(null);
+      setRevPerHourProviders(null);
+      setUniquePtProviders(null);
+      setAvgRevProviders(null);
+      setRetailProviders(null);
+      setRetailPctProviders(null);
+      setUtilProviders(null);
+      setCancelProviders(null);
+      setNoshowProviders(null);
     }
   }, [locationNames, hasActiveFilter]);
 
@@ -3569,6 +3594,13 @@ export default function PerformanceTracker({ initialLocTypes, initialPractices, 
                   onChange={setUniquePtLocs}
                   minWidth={85}
                 />)}
+                {isSingleLocation && availableInjProviders.length > 0 && (<MultiSelectDropdown
+                  label="Provider"
+                  options={availableInjProviders}
+                  selected={uniquePtProviders || availableInjProviders}
+                  onChange={setUniquePtProviders}
+                  minWidth={85}
+                />)}
               </div>
             }
           >
@@ -3592,6 +3624,13 @@ export default function PerformanceTracker({ initialLocTypes, initialPractices, 
                   options={['Total', ...locationNames]}
                   selected={avgRevLocs}
                   onChange={setAvgRevLocs}
+                  minWidth={85}
+                />)}
+                {isSingleLocation && availableInjProviders.length > 0 && (<MultiSelectDropdown
+                  label="Provider"
+                  options={availableInjProviders}
+                  selected={avgRevProviders || availableInjProviders}
+                  onChange={setAvgRevProviders}
                   minWidth={85}
                 />)}
               </div>
@@ -3623,6 +3662,13 @@ export default function PerformanceTracker({ initialLocTypes, initialPractices, 
                   onChange={setRetailLocs}
                   minWidth={85}
                 />)}
+                {isSingleLocation && availableInjProviders.length > 0 && (<MultiSelectDropdown
+                  label="Provider"
+                  options={availableInjProviders}
+                  selected={retailProviders || availableInjProviders}
+                  onChange={setRetailProviders}
+                  minWidth={85}
+                />)}
               </div>
             }
           >
@@ -3646,6 +3692,13 @@ export default function PerformanceTracker({ initialLocTypes, initialPractices, 
                   options={['Total', ...locationNames]}
                   selected={retailPctLocs}
                   onChange={setRetailPctLocs}
+                  minWidth={85}
+                />)}
+                {isSingleLocation && availableInjProviders.length > 0 && (<MultiSelectDropdown
+                  label="Provider"
+                  options={availableInjProviders}
+                  selected={retailPctProviders || availableInjProviders}
+                  onChange={setRetailPctProviders}
                   minWidth={85}
                 />)}
               </div>
@@ -3677,6 +3730,13 @@ export default function PerformanceTracker({ initialLocTypes, initialPractices, 
                   onChange={setCancelLocs}
                   minWidth={85}
                 />)}
+                {isSingleLocation && availableInjProviders.length > 0 && (<MultiSelectDropdown
+                  label="Provider"
+                  options={availableInjProviders}
+                  selected={cancelProviders || availableInjProviders}
+                  onChange={setCancelProviders}
+                  minWidth={85}
+                />)}
               </div>
             }
           >
@@ -3700,6 +3760,13 @@ export default function PerformanceTracker({ initialLocTypes, initialPractices, 
                   options={['Total', ...locationNames]}
                   selected={noshowLocs}
                   onChange={setNoshowLocs}
+                  minWidth={85}
+                />)}
+                {isSingleLocation && availableInjProviders.length > 0 && (<MultiSelectDropdown
+                  label="Provider"
+                  options={availableInjProviders}
+                  selected={noshowProviders || availableInjProviders}
+                  onChange={setNoshowProviders}
                   minWidth={85}
                 />)}
               </div>
@@ -3729,6 +3796,13 @@ export default function PerformanceTracker({ initialLocTypes, initialPractices, 
                   options={['Total', ...locationNames]}
                   selected={utilizationLocs}
                   onChange={setUtilizationLocs}
+                  minWidth={85}
+                />)}
+                {isSingleLocation && availableInjProviders.length > 0 && (<MultiSelectDropdown
+                  label="Provider"
+                  options={availableInjProviders}
+                  selected={utilProviders || availableInjProviders}
+                  onChange={setUtilProviders}
                   minWidth={85}
                 />)}
               </div>
