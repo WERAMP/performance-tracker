@@ -2492,39 +2492,37 @@ export default function PerformanceTracker({ initialLocTypes, initialPractices, 
         locWeekMap[m.w][m.c] = (locWeekMap[m.w][m.c] || 0) + (m.co || 0);
       }
     });
+    // Collections budget: no separate collections budget data exists, so omit budget line entirely
+    // (previously used average collections as a flat "budget" line which was misleading)
     const allWeeks = Object.keys(weekMap).sort();
     const { mode: tMode, count: tCount } = getEffectiveTime('collChart');
     const timeRange = getTimeRange(allWeeks, tMode, tCount);
 
     if (!timeRange.isMonthly) {
       const weeks = timeRange.periods;
-      const totalColl = weeks.reduce((s, w) => s + (weekMap[w] || 0), 0);
-      const avgWeekly = weeks.length ? Math.round(totalColl / weeks.length) : 0;
       const data = weeks.map(w => {
-        const row = { week: formatWeek(w), 'All Locations': weekMap[w] || 0, Budget: avgWeekly };
+        const row = { week: formatWeek(w), 'All Locations': weekMap[w] || 0 };
         collChartLocs.filter(n => n !== 'Total').forEach(loc => { row[loc] = locWeekMap[w]?.[loc] || 0; });
         return row;
       });
       const locs = collChartLocs.filter(n => n !== 'Total');
-      const series = [...(collChartLocs.includes('Total') ? ['All Locations'] : []), 'Budget', ...locs];
+      const series = [...(collChartLocs.includes('Total') ? ['All Locations'] : []), ...locs];
       return { collChartData: data, collChartSeries: series };
     } else {
       const months = timeRange.periods;
       const today = new Date();
       const curMonth = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}`;
-      const totalColl = allWeeks.filter(w => months.some(mk => w.startsWith(mk))).reduce((s, w) => s + (weekMap[w] || 0), 0);
-      const avgMonthly = months.length ? Math.round(totalColl / months.length) : 0;
       const data = months.map(mk => {
         const monthWeeks = allWeeks.filter(w => w.startsWith(mk));
         const coll = monthWeeks.reduce((s, w) => s + (weekMap[w] || 0), 0);
-        const row = { week: formatMonth(mk, mk === curMonth), 'All Locations': coll, Budget: avgMonthly };
+        const row = { week: formatMonth(mk, mk === curMonth), 'All Locations': coll };
         collChartLocs.filter(n => n !== 'Total').forEach(loc => {
           row[loc] = monthWeeks.reduce((s, w) => s + (locWeekMap[w]?.[loc] || 0), 0);
         });
         return row;
       });
       const locs = collChartLocs.filter(n => n !== 'Total');
-      const series = [...(collChartLocs.includes('Total') ? ['All Locations'] : []), 'Budget', ...locs];
+      const series = [...(collChartLocs.includes('Total') ? ['All Locations'] : []), ...locs];
       return { collChartData: data, collChartSeries: series };
     }
   }, [metrics, locationNames, collChartLocs, globalTimeMode, globalPeriodCount, chartTimeOverrides]);
