@@ -105,11 +105,52 @@ function formatMonth(monthKey, isCurrent = false) {
 // Get effective time range for a chart
 function getTimeRange(allWeeks, mode, count) {
   const sorted = [...allWeeks].sort();
+  const today = new Date();
+  const todayStr = today.toISOString().split('T')[0];
+
+  if (mode === 'mtd') {
+    // Month-to-date: weeks that overlap with the current calendar month
+    const firstOfMonth = new Date(today.getFullYear(), today.getMonth(), 1);
+    const windowStart = new Date(firstOfMonth);
+    windowStart.setDate(windowStart.getDate() - 6); // catch week straddling month boundary
+    const windowStartStr = windowStart.toISOString().split('T')[0];
+    const weeks = sorted.filter(w => w >= windowStartStr && w <= todayStr);
+    return { periods: weeks, isMonthly: false, weekSet: new Set(weeks), formatLabel: formatWeek };
+  }
+
+  if (mode === 'qtd') {
+    // Quarter-to-date: weeks that overlap with the current calendar quarter
+    const qStartMonth = Math.floor(today.getMonth() / 3) * 3; // 0, 3, 6, or 9
+    const firstOfQuarter = new Date(today.getFullYear(), qStartMonth, 1);
+    const windowStart = new Date(firstOfQuarter);
+    windowStart.setDate(windowStart.getDate() - 6); // catch week straddling quarter boundary
+    const windowStartStr = windowStart.toISOString().split('T')[0];
+    const weeks = sorted.filter(w => w >= windowStartStr && w <= todayStr);
+    return { periods: weeks, isMonthly: false, weekSet: new Set(weeks), formatLabel: formatWeek };
+  }
+
+  if (mode === 'ytd') {
+    // Year-to-date: all months in the current year through the current month, shown monthly
+    const curYear = today.getFullYear();
+    const curMonth = `${curYear}-${String(today.getMonth() + 1).padStart(2, '0')}`;
+    const months = [...new Set(sorted.map(w => w.substring(0, 7)))]
+      .filter(mk => mk >= `${curYear}-01` && mk <= curMonth)
+      .sort();
+    return {
+      periods: months,
+      isMonthly: true,
+      weekSet: new Set(sorted.filter(w => months.includes(w.substring(0, 7)))),
+      formatLabel: (w) => {
+        const mk = w.substring(0, 7);
+        return formatMonth(mk, mk === curMonth);
+      },
+    };
+  }
+
   if (mode === 'monthly') {
     // Group weeks into months
     const months = [...new Set(sorted.map(w => w.substring(0, 7)))].sort();
     const sliced = months.slice(-count);
-    const today = new Date();
     const curMonth = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}`;
     return {
       periods: sliced,
@@ -121,6 +162,7 @@ function getTimeRange(allWeeks, mode, count) {
       },
     };
   }
+
   // Weekly mode
   const sliced = sorted.slice(-count);
   return {
@@ -676,17 +718,24 @@ function ChartTimeControl({ chartId, globalMode, globalCount, overrides, setOver
     color: V.navy, cursor: 'pointer', minWidth: 65,
   };
 
+  const isFixedPeriod = ['mtd', 'qtd', 'ytd'].includes(effectiveMode);
+
   return (
     <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
       <select value={effectiveMode} onChange={handleModeChange} style={selectStyle}>
         <option value="weekly">Weekly</option>
         <option value="monthly">Monthly</option>
+        <option value="mtd">MTD</option>
+        <option value="qtd">QTD</option>
+        <option value="ytd">YTD</option>
       </select>
-      <select value={effectiveCount} onChange={handleCountChange} style={{ ...selectStyle, minWidth: 40 }}>
-        {[1,2,3,4,5,6,7,8,9,10,11,12].map(n => (
-          <option key={n} value={n}>{n}</option>
-        ))}
-      </select>
+      {!isFixedPeriod && (
+        <select value={effectiveCount} onChange={handleCountChange} style={{ ...selectStyle, minWidth: 40 }}>
+          {[1,2,3,4,5,6,7,8,9,10,11,12].map(n => (
+            <option key={n} value={n}>{n}</option>
+          ))}
+        </select>
+      )}
       {isOverridden && (
         <button onClick={handleReset} style={{
           background: 'none', border: 'none', color: V.gold,
@@ -3579,15 +3628,20 @@ export default function PerformanceTracker({ initialLocTypes, initialPractices, 
             }}>
               <option value="weekly">Weekly</option>
               <option value="monthly">Monthly</option>
+              <option value="mtd">MTD</option>
+              <option value="qtd">QTD</option>
+              <option value="ytd">YTD</option>
             </select>
-            <select value={globalPeriodCount} onChange={e => setGlobalPeriodCount(Number(e.target.value))} style={{
-              padding: '7px 10px', border: `1.5px solid ${V.taupe}`, borderRadius: 6,
-              fontSize: 12, fontFamily: FONT.body, color: V.navy, background: V.cream, cursor: 'pointer', minWidth: 50,
-            }}>
-              {[1,2,3,4,5,6,7,8,9,10,11,12].map(n => (
-                <option key={n} value={n}>{n}</option>
-              ))}
-            </select>
+            {!['mtd', 'qtd', 'ytd'].includes(globalTimeMode) && (
+              <select value={globalPeriodCount} onChange={e => setGlobalPeriodCount(Number(e.target.value))} style={{
+                padding: '7px 10px', border: `1.5px solid ${V.taupe}`, borderRadius: 6,
+                fontSize: 12, fontFamily: FONT.body, color: V.navy, background: V.cream, cursor: 'pointer', minWidth: 50,
+              }}>
+                {[1,2,3,4,5,6,7,8,9,10,11,12].map(n => (
+                  <option key={n} value={n}>{n}</option>
+                ))}
+              </select>
+            )}
           </div>
 
           <button
