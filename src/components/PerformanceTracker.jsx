@@ -3668,7 +3668,6 @@ export default function PerformanceTracker({ initialLocTypes, initialPractices, 
                 height={300}
                 formatter={fmtK}
                 colorMap={{ 'All Locations': V.gold, Budget: V.navy, ...locationColorMap }}
-                rightAxisSeries={revChartLocs.filter(n => n !== 'Total')}
               />
             </ChartCard>
             <ChartCard
