@@ -1744,6 +1744,8 @@ export default function PerformanceTracker({ initialLocTypes, initialPractices, 
   const [providerHoursData, setProviderHoursData] = useState([]);
   const [utilizationData, setUtilizationData] = useState([]);
   const [metricsProviderData, setMetricsProviderData] = useState([]);
+  const [opsProviderData, setOpsProviderData] = useState([]);
+  const [utilHoursProviderData, setUtilHoursProviderData] = useState([]);
   const [loading, setLoading] = useState(true);
 
   const [selectedLocTypes, setSelectedLocTypes] = useState(initialLocTypes || []);
@@ -1810,8 +1812,11 @@ export default function PerformanceTracker({ initialLocTypes, initialPractices, 
   const [retailProviders, setRetailProviders] = useState(null);
   const [retailPctProviders, setRetailPctProviders] = useState(null);
   const [utilProviders, setUtilProviders] = useState(null);
+  const [hoursProviders, setHoursProviders] = useState(null);
   const [cancelProviders, setCancelProviders] = useState(null);
   const [noshowProviders, setNoshowProviders] = useState(null);
+  const [injSalesProviders, setInjSalesProviders] = useState(null);
+  const [injPctProviders, setInjPctProviders] = useState(null);
 
   // Fetch all data on mount
   useEffect(() => {
@@ -1830,7 +1835,9 @@ export default function PerformanceTracker({ initialLocTypes, initialPractices, 
       fetch('/data/performance/weekly-provider-hours.json').then(r => r.json()).catch(() => []),
       fetch('/data/performance/weekly-utilization.json').then(r => r.json()).catch(() => []),
       fetch('/data/performance/weekly-metrics-provider.json').then(r => r.json()).catch(() => []),
-    ]).then(([locs, met, ops, btx, bud, injRevProv, btxProv, ntxFiller, syrLoc, syrProv, revCollProv, provHours, utilization, metricsProvData]) => {
+      fetch('/data/performance/weekly-ops-provider.json').then(r => r.json()).catch(() => []),
+      fetch('/data/performance/weekly-util-hours-provider.json').then(r => r.json()).catch(() => []),
+    ]).then(([locs, met, ops, btx, bud, injRevProv, btxProv, ntxFiller, syrLoc, syrProv, revCollProv, provHours, utilization, metricsProvData, opsProvData, utilHoursProvData]) => {
       setLocations(locs);
       setMetrics(met);
       setOpsData(ops);
@@ -1845,6 +1852,8 @@ export default function PerformanceTracker({ initialLocTypes, initialPractices, 
       setProviderHoursData(provHours);
       setUtilizationData(utilization);
       setMetricsProviderData(metricsProvData);
+      setOpsProviderData(opsProvData);
+      setUtilHoursProviderData(utilHoursProvData);
       setLoading(false);
       // Mark data as loaded so cleanup effects can run
       // Use a timeout to let the first render with data settle before enabling cleanup
@@ -2365,9 +2374,47 @@ export default function PerformanceTracker({ initialLocTypes, initialPractices, 
     }
   }, [metrics, metricsProviderData, locationNames, retailPctLocs, retailPctProviders, isSingleLocation, availableInjProviders, globalTimeMode, globalPeriodCount, chartTimeOverrides]);
 
-  // ── Injectables Sales (sum Total + per-location) ──
-  const { injSalesData, injSalesSeries } = useMemo(() => {
+  // ── Injectables Sales (sum Total + per-location, or per-provider) ──
+  const { injSalesData, injSalesSeries, injSalesIsProviderMode } = useMemo(() => {
     const centerNames = new Set(locationNames);
+    const useProvFilter = isSingleLocation && injSalesProviders && injSalesProviders.length > 0 && injSalesProviders.length < availableInjProviders.length;
+
+    if (useProvFilter) {
+      const provSet = new Set(injSalesProviders);
+      const filtered = metricsProviderData.filter(m => centerNames.has(m.c) && provSet.has(m.pr));
+      const allWeeks = [...new Set(filtered.map(m => m.w))].sort();
+      const { mode: tMode, count: tCount } = getEffectiveTime('injSales');
+      const timeRange = getTimeRange(allWeeks, tMode, tCount);
+      const selectedProvs = [...provSet].sort();
+
+      if (!timeRange.isMonthly) {
+        const data = timeRange.periods.map(w => {
+          const row = { week: formatWeek(w) };
+          const weekRows = filtered.filter(m => m.w === w);
+          selectedProvs.forEach(pr => {
+            const provRows = weekRows.filter(m => m.pr === pr);
+            row[pr] = provRows.reduce((s, m) => s + (m.inj || 0), 0);
+          });
+          return row;
+        });
+        return { injSalesData: data, injSalesSeries: selectedProvs, injSalesIsProviderMode: true };
+      } else {
+        const today = new Date();
+        const curMonth = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}`;
+        const data = timeRange.periods.map(mk => {
+          const row = { week: formatMonth(mk, mk === curMonth) };
+          const monthRows = filtered.filter(m => m.w.startsWith(mk));
+          selectedProvs.forEach(pr => {
+            const provRows = monthRows.filter(m => m.pr === pr);
+            row[pr] = provRows.reduce((s, m) => s + (m.inj || 0), 0);
+          });
+          return row;
+        });
+        return { injSalesData: data, injSalesSeries: selectedProvs, injSalesIsProviderMode: true };
+      }
+    }
+
+    // Location-level mode (default)
     const filtered = metrics.filter(m => centerNames.has(m.c));
     const allWeeks = [...new Set(filtered.map(m => m.w))].sort();
     const { mode: tMode, count: tCount } = getEffectiveTime('injSales');
@@ -2385,7 +2432,7 @@ export default function PerformanceTracker({ initialLocTypes, initialPractices, 
         return row;
       });
       const locs = injSalesLocs.filter(n => n !== 'Total');
-      return { injSalesData: data, injSalesSeries: [...(injSalesLocs.includes('Total') ? ['Total'] : []), ...locs] };
+      return { injSalesData: data, injSalesSeries: [...(injSalesLocs.includes('Total') ? ['Total'] : []), ...locs], injSalesIsProviderMode: false };
     } else {
       const months = timeRange.periods;
       const today = new Date();
@@ -2400,13 +2447,55 @@ export default function PerformanceTracker({ initialLocTypes, initialPractices, 
         return row;
       });
       const locs = injSalesLocs.filter(n => n !== 'Total');
-      return { injSalesData: data, injSalesSeries: [...(injSalesLocs.includes('Total') ? ['Total'] : []), ...locs] };
+      return { injSalesData: data, injSalesSeries: [...(injSalesLocs.includes('Total') ? ['Total'] : []), ...locs], injSalesIsProviderMode: false };
     }
-  }, [metrics, locationNames, injSalesLocs, globalTimeMode, globalPeriodCount, chartTimeOverrides]);
+  }, [metrics, metricsProviderData, locationNames, injSalesLocs, injSalesProviders, isSingleLocation, availableInjProviders, globalTimeMode, globalPeriodCount, chartTimeOverrides]);
 
-  // ── Injectables % of Total Sales (weighted average Total + per-location) ──
-  const { injPctData, injPctSeries } = useMemo(() => {
+  // ── Injectables % of Total Sales (weighted average Total + per-location, or per-provider) ──
+  const { injPctData, injPctSeries, injPctIsProviderMode } = useMemo(() => {
     const centerNames = new Set(locationNames);
+    const useProvFilter = isSingleLocation && injPctProviders && injPctProviders.length > 0 && injPctProviders.length < availableInjProviders.length;
+
+    if (useProvFilter) {
+      const provSet = new Set(injPctProviders);
+      const filtered = metricsProviderData.filter(m => centerNames.has(m.c) && provSet.has(m.pr));
+      const allWeeks = [...new Set(filtered.map(m => m.w))].sort();
+      const { mode: tMode, count: tCount } = getEffectiveTime('injPct');
+      const timeRange = getTimeRange(allWeeks, tMode, tCount);
+      const selectedProvs = [...provSet].sort();
+
+      if (!timeRange.isMonthly) {
+        const data = timeRange.periods.map(w => {
+          const row = { week: formatWeek(w) };
+          const weekRows = filtered.filter(m => m.w === w);
+          selectedProvs.forEach(pr => {
+            const provRows = weekRows.filter(m => m.pr === pr);
+            const sales = provRows.reduce((s, m) => s + (m.s || 0), 0);
+            const inj = provRows.reduce((s, m) => s + (m.inj || 0), 0);
+            if (sales > 0) row[pr] = +((inj / sales) * 100).toFixed(1);
+          });
+          return row;
+        });
+        return { injPctData: data, injPctSeries: selectedProvs, injPctIsProviderMode: true };
+      } else {
+        const today = new Date();
+        const curMonth = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}`;
+        const data = timeRange.periods.map(mk => {
+          const row = { week: formatMonth(mk, mk === curMonth) };
+          const monthRows = filtered.filter(m => m.w.startsWith(mk));
+          selectedProvs.forEach(pr => {
+            const provRows = monthRows.filter(m => m.pr === pr);
+            const sales = provRows.reduce((s, m) => s + (m.s || 0), 0);
+            const inj = provRows.reduce((s, m) => s + (m.inj || 0), 0);
+            if (sales > 0) row[pr] = +((inj / sales) * 100).toFixed(1);
+          });
+          return row;
+        });
+        return { injPctData: data, injPctSeries: selectedProvs, injPctIsProviderMode: true };
+      }
+    }
+
+    // Location-level mode (default)
     const filtered = metrics.filter(m => centerNames.has(m.c));
     const allWeeks = [...new Set(filtered.map(m => m.w))].sort();
     const { mode: tMode, count: tCount } = getEffectiveTime('injPct');
@@ -2426,7 +2515,7 @@ export default function PerformanceTracker({ initialLocTypes, initialPractices, 
         return row;
       });
       const locs = injPctLocs.filter(n => n !== 'Total');
-      return { injPctData: data, injPctSeries: [...(injPctLocs.includes('Total') ? ['Total'] : []), ...locs] };
+      return { injPctData: data, injPctSeries: [...(injPctLocs.includes('Total') ? ['Total'] : []), ...locs], injPctIsProviderMode: false };
     } else {
       const months = timeRange.periods;
       const today = new Date();
@@ -2445,9 +2534,9 @@ export default function PerformanceTracker({ initialLocTypes, initialPractices, 
         return row;
       });
       const locs = injPctLocs.filter(n => n !== 'Total');
-      return { injPctData: data, injPctSeries: [...(injPctLocs.includes('Total') ? ['Total'] : []), ...locs] };
+      return { injPctData: data, injPctSeries: [...(injPctLocs.includes('Total') ? ['Total'] : []), ...locs], injPctIsProviderMode: false };
     }
-  }, [metrics, locationNames, injPctLocs, globalTimeMode, globalPeriodCount, chartTimeOverrides]);
+  }, [metrics, metricsProviderData, locationNames, injPctLocs, injPctProviders, isSingleLocation, availableInjProviders, globalTimeMode, globalPeriodCount, chartTimeOverrides]);
 
   // ── Botox Units per Appointment (weighted average Total + per-location) ──
   const { btxData: btxChartData, btxSeries } = useMemo(() => {
@@ -2495,9 +2584,48 @@ export default function PerformanceTracker({ initialLocTypes, initialPractices, 
     }
   }, [btxData, locationNames, btxLocs, globalTimeMode, globalPeriodCount, chartTimeOverrides]);
 
-  // ── Utilization Rate (average Total + per-location) ──
-  const { utilizationChartData, utilizationSeries } = useMemo(() => {
+  // ── Utilization Rate (average Total + per-location, or per-provider) ──
+  const { utilizationChartData, utilizationSeries, utilizationIsProviderMode } = useMemo(() => {
     const centerNames = new Set(locationNames);
+    const useProvFilter = isSingleLocation && utilProviders && utilProviders.length > 0 && utilProviders.length < availableInjProviders.length;
+
+    if (useProvFilter) {
+      const provSet = new Set(utilProviders);
+      const filtered = utilHoursProviderData.filter(m => centerNames.has(m.c) && provSet.has(m.pr));
+      const allWeeks = [...new Set(filtered.map(m => m.w))].sort();
+      const { mode: tMode, count: tCount } = getEffectiveTime('utilization');
+      const timeRange = getTimeRange(allWeeks, tMode, tCount);
+      const selectedProvs = [...provSet].sort();
+
+      if (!timeRange.isMonthly) {
+        const data = timeRange.periods.map(w => {
+          const row = { week: timeRange.formatLabel(w) };
+          const weekRows = filtered.filter(m => m.w === w);
+          selectedProvs.forEach(pr => {
+            const m = weekRows.find(r => r.pr === pr);
+            if (m && m.ur != null) row[pr] = m.ur;
+          });
+          return row;
+        });
+        return { utilizationChartData: data, utilizationSeries: selectedProvs, utilizationIsProviderMode: true };
+      } else {
+        const today = new Date();
+        const curMonth = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}`;
+        const data = timeRange.periods.map(mk => {
+          const row = { week: formatMonth(mk, mk === curMonth) };
+          const monthRows = filtered.filter(m => m.w.startsWith(mk));
+          selectedProvs.forEach(pr => {
+            const provRows = monthRows.filter(m => m.pr === pr);
+            const vals = provRows.map(m => m.ur).filter(v => v != null && v > 0);
+            if (vals.length) row[pr] = +(vals.reduce((a, b) => a + b, 0) / vals.length).toFixed(1);
+          });
+          return row;
+        });
+        return { utilizationChartData: data, utilizationSeries: selectedProvs, utilizationIsProviderMode: true };
+      }
+    }
+
+    // Location-level mode (default)
     const filtered = utilizationData.filter(m => centerNames.has(m.c));
     const allWeeks = [...new Set(filtered.map(m => m.w))].sort();
     const { mode: tMode, count: tCount } = getEffectiveTime('utilization');
@@ -2517,7 +2645,7 @@ export default function PerformanceTracker({ initialLocTypes, initialPractices, 
         return row;
       });
       const locs = utilizationLocs.filter(n => n !== TOTAL);
-      return { utilizationChartData: data, utilizationSeries: [...(utilizationLocs.includes(TOTAL) ? [TOTAL] : []), ...locs] };
+      return { utilizationChartData: data, utilizationSeries: [...(utilizationLocs.includes(TOTAL) ? [TOTAL] : []), ...locs], utilizationIsProviderMode: false };
     } else {
       const months = timeRange.periods;
       const data = months.map(mk => {
@@ -2533,13 +2661,51 @@ export default function PerformanceTracker({ initialLocTypes, initialPractices, 
         return row;
       });
       const locs = utilizationLocs.filter(n => n !== TOTAL);
-      return { utilizationChartData: data, utilizationSeries: [...(utilizationLocs.includes(TOTAL) ? [TOTAL] : []), ...locs] };
+      return { utilizationChartData: data, utilizationSeries: [...(utilizationLocs.includes(TOTAL) ? [TOTAL] : []), ...locs], utilizationIsProviderMode: false };
     }
-  }, [utilizationData, locationNames, utilizationLocs, globalTimeMode, globalPeriodCount, chartTimeOverrides]);
+  }, [utilizationData, utilHoursProviderData, locationNames, utilizationLocs, utilProviders, isSingleLocation, availableInjProviders, globalTimeMode, globalPeriodCount, chartTimeOverrides]);
 
-  // ── Net Provider Hours (sum Total + per-location) ──
-  const { netHoursChartData, netHoursSeries } = useMemo(() => {
+  // ── Net Provider Hours (sum Total + per-location, or per-provider) ──
+  const { netHoursChartData, netHoursSeries, netHoursIsProviderMode } = useMemo(() => {
     const centerNames = new Set(locationNames);
+    const useProvFilter = isSingleLocation && hoursProviders && hoursProviders.length > 0 && hoursProviders.length < availableInjProviders.length;
+
+    if (useProvFilter) {
+      const provSet = new Set(hoursProviders);
+      const filtered = utilHoursProviderData.filter(m => centerNames.has(m.c) && provSet.has(m.pr));
+      const allWeeks = [...new Set(filtered.map(m => m.w))].sort();
+      const { mode: tMode, count: tCount } = getEffectiveTime('netHours');
+      const timeRange = getTimeRange(allWeeks, tMode, tCount);
+      const selectedProvs = [...provSet].sort();
+
+      if (!timeRange.isMonthly) {
+        const data = timeRange.periods.map(w => {
+          const row = { week: timeRange.formatLabel(w) };
+          const weekRows = filtered.filter(m => m.w === w);
+          selectedProvs.forEach(pr => {
+            const m = weekRows.find(r => r.pr === pr);
+            if (m) row[pr] = Math.round(m.h);
+          });
+          return row;
+        });
+        return { netHoursChartData: data, netHoursSeries: selectedProvs, netHoursIsProviderMode: true };
+      } else {
+        const today = new Date();
+        const curMonth = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}`;
+        const data = timeRange.periods.map(mk => {
+          const row = { week: formatMonth(mk, mk === curMonth) };
+          const monthRows = filtered.filter(m => m.w.startsWith(mk));
+          selectedProvs.forEach(pr => {
+            const provRows = monthRows.filter(m => m.pr === pr);
+            if (provRows.length) row[pr] = Math.round(provRows.reduce((s, m) => s + (m.h || 0), 0));
+          });
+          return row;
+        });
+        return { netHoursChartData: data, netHoursSeries: selectedProvs, netHoursIsProviderMode: true };
+      }
+    }
+
+    // Location-level mode (default)
     const filtered = providerHoursData.filter(m => centerNames.has(m.c));
     const allWeeks = [...new Set(filtered.map(m => m.w))].sort();
     const { mode: tMode, count: tCount } = getEffectiveTime('netHours');
@@ -2558,7 +2724,7 @@ export default function PerformanceTracker({ initialLocTypes, initialPractices, 
         return row;
       });
       const locs = netHoursLocs.filter(n => n !== TOTAL);
-      return { netHoursChartData: data, netHoursSeries: [...(netHoursLocs.includes(TOTAL) ? [TOTAL] : []), ...locs] };
+      return { netHoursChartData: data, netHoursSeries: [...(netHoursLocs.includes(TOTAL) ? [TOTAL] : []), ...locs], netHoursIsProviderMode: false };
     } else {
       const months = timeRange.periods;
       const data = months.map(mk => {
@@ -2572,14 +2738,52 @@ export default function PerformanceTracker({ initialLocTypes, initialPractices, 
         return row;
       });
       const locs = netHoursLocs.filter(n => n !== TOTAL);
-      return { netHoursChartData: data, netHoursSeries: [...(netHoursLocs.includes(TOTAL) ? [TOTAL] : []), ...locs] };
+      return { netHoursChartData: data, netHoursSeries: [...(netHoursLocs.includes(TOTAL) ? [TOTAL] : []), ...locs], netHoursIsProviderMode: false };
     }
-  }, [providerHoursData, locationNames, netHoursLocs, globalTimeMode, globalPeriodCount, chartTimeOverrides]);
+  }, [providerHoursData, utilHoursProviderData, locationNames, netHoursLocs, hoursProviders, isSingleLocation, availableInjProviders, globalTimeMode, globalPeriodCount, chartTimeOverrides]);
 
-  // ── Cancel Rate (average Total + per-location) ──
-  // NOTE: ops data now uses center_name directly (no more display_name mapping needed)
-  const { cancelData, cancelSeries } = useMemo(() => {
+  // ── Cancel Rate (average Total + per-location, or per-provider) ──
+  const { cancelData, cancelSeries, cancelIsProviderMode } = useMemo(() => {
     const centerNames = new Set(locationNames);
+    const useProvFilter = isSingleLocation && cancelProviders && cancelProviders.length > 0 && cancelProviders.length < availableInjProviders.length;
+
+    if (useProvFilter) {
+      const provSet = new Set(cancelProviders);
+      const filtered = opsProviderData.filter(m => centerNames.has(m.c) && provSet.has(m.pr));
+      const allWeeks = [...new Set(filtered.map(m => m.w))].sort();
+      const { mode: tMode, count: tCount } = getEffectiveTime('cancel');
+      const timeRange = getTimeRange(allWeeks, tMode, tCount);
+      const selectedProvs = [...provSet].sort();
+
+      if (!timeRange.isMonthly) {
+        const data = timeRange.periods.map(w => {
+          const row = { week: timeRange.formatLabel(w) };
+          const weekRows = filtered.filter(m => m.w === w);
+          selectedProvs.forEach(pr => {
+            const m = weekRows.find(r => r.pr === pr);
+            if (m) row[pr] = m.cn;
+          });
+          return row;
+        });
+        return { cancelData: data, cancelSeries: selectedProvs, cancelIsProviderMode: true };
+      } else {
+        const today = new Date();
+        const curMonth = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}`;
+        const data = timeRange.periods.map(mk => {
+          const row = { week: formatMonth(mk, mk === curMonth) };
+          const monthRows = filtered.filter(m => m.w.startsWith(mk));
+          selectedProvs.forEach(pr => {
+            const provRows = monthRows.filter(m => m.pr === pr);
+            const vals = provRows.map(m => m.cn).filter(v => v != null);
+            if (vals.length) row[pr] = +(vals.reduce((a, b) => a + b, 0) / vals.length).toFixed(1);
+          });
+          return row;
+        });
+        return { cancelData: data, cancelSeries: selectedProvs, cancelIsProviderMode: true };
+      }
+    }
+
+    // Location-level mode (default)
     const filtered = opsData.filter(m => centerNames.has(m.c));
     const allWeeks = [...new Set(filtered.map(m => m.w))].sort();
     const { mode: tMode, count: tCount } = getEffectiveTime('cancel');
@@ -2599,7 +2803,7 @@ export default function PerformanceTracker({ initialLocTypes, initialPractices, 
         return row;
       });
       const locs = cancelLocs.filter(n => n !== TOTAL);
-      return { cancelData: data, cancelSeries: [...(cancelLocs.includes(TOTAL) ? [TOTAL] : []), ...locs] };
+      return { cancelData: data, cancelSeries: [...(cancelLocs.includes(TOTAL) ? [TOTAL] : []), ...locs], cancelIsProviderMode: false };
     } else {
       const months = timeRange.periods;
       const data = months.map(mk => {
@@ -2615,13 +2819,52 @@ export default function PerformanceTracker({ initialLocTypes, initialPractices, 
         return row;
       });
       const locs = cancelLocs.filter(n => n !== TOTAL);
-      return { cancelData: data, cancelSeries: [...(cancelLocs.includes(TOTAL) ? [TOTAL] : []), ...locs] };
+      return { cancelData: data, cancelSeries: [...(cancelLocs.includes(TOTAL) ? [TOTAL] : []), ...locs], cancelIsProviderMode: false };
     }
-  }, [opsData, locationNames, cancelLocs, globalTimeMode, globalPeriodCount, chartTimeOverrides]);
+  }, [opsData, opsProviderData, locationNames, cancelLocs, cancelProviders, isSingleLocation, availableInjProviders, globalTimeMode, globalPeriodCount, chartTimeOverrides]);
 
-  // ── No-Show Rate (average Total + per-location) ──
-  const { noshowData, noshowSeries } = useMemo(() => {
+  // ── No-Show Rate (average Total + per-location, or per-provider) ──
+  const { noshowData, noshowSeries, noshowIsProviderMode } = useMemo(() => {
     const centerNames = new Set(locationNames);
+    const useProvFilter = isSingleLocation && noshowProviders && noshowProviders.length > 0 && noshowProviders.length < availableInjProviders.length;
+
+    if (useProvFilter) {
+      const provSet = new Set(noshowProviders);
+      const filtered = opsProviderData.filter(m => centerNames.has(m.c) && provSet.has(m.pr));
+      const allWeeks = [...new Set(filtered.map(m => m.w))].sort();
+      const { mode: tMode, count: tCount } = getEffectiveTime('noshow');
+      const timeRange = getTimeRange(allWeeks, tMode, tCount);
+      const selectedProvs = [...provSet].sort();
+
+      if (!timeRange.isMonthly) {
+        const data = timeRange.periods.map(w => {
+          const row = { week: timeRange.formatLabel(w) };
+          const weekRows = filtered.filter(m => m.w === w);
+          selectedProvs.forEach(pr => {
+            const m = weekRows.find(r => r.pr === pr);
+            if (m) row[pr] = m.ns;
+          });
+          return row;
+        });
+        return { noshowData: data, noshowSeries: selectedProvs, noshowIsProviderMode: true };
+      } else {
+        const today = new Date();
+        const curMonth = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}`;
+        const data = timeRange.periods.map(mk => {
+          const row = { week: formatMonth(mk, mk === curMonth) };
+          const monthRows = filtered.filter(m => m.w.startsWith(mk));
+          selectedProvs.forEach(pr => {
+            const provRows = monthRows.filter(m => m.pr === pr);
+            const vals = provRows.map(m => m.ns).filter(v => v != null);
+            if (vals.length) row[pr] = +(vals.reduce((a, b) => a + b, 0) / vals.length).toFixed(1);
+          });
+          return row;
+        });
+        return { noshowData: data, noshowSeries: selectedProvs, noshowIsProviderMode: true };
+      }
+    }
+
+    // Location-level mode (default)
     const filtered = opsData.filter(m => centerNames.has(m.c));
     const allWeeks = [...new Set(filtered.map(m => m.w))].sort();
     const { mode: tMode, count: tCount } = getEffectiveTime('noshow');
@@ -2641,7 +2884,7 @@ export default function PerformanceTracker({ initialLocTypes, initialPractices, 
         return row;
       });
       const locs = noshowLocs.filter(n => n !== TOTAL);
-      return { noshowData: data, noshowSeries: [...(noshowLocs.includes(TOTAL) ? [TOTAL] : []), ...locs] };
+      return { noshowData: data, noshowSeries: [...(noshowLocs.includes(TOTAL) ? [TOTAL] : []), ...locs], noshowIsProviderMode: false };
     } else {
       const months = timeRange.periods;
       const data = months.map(mk => {
@@ -2657,9 +2900,9 @@ export default function PerformanceTracker({ initialLocTypes, initialPractices, 
         return row;
       });
       const locs = noshowLocs.filter(n => n !== TOTAL);
-      return { noshowData: data, noshowSeries: [...(noshowLocs.includes(TOTAL) ? [TOTAL] : []), ...locs] };
+      return { noshowData: data, noshowSeries: [...(noshowLocs.includes(TOTAL) ? [TOTAL] : []), ...locs], noshowIsProviderMode: false };
     }
-  }, [opsData, locationNames, noshowLocs, globalTimeMode, globalPeriodCount, chartTimeOverrides]);
+  }, [opsData, opsProviderData, locationNames, noshowLocs, noshowProviders, isSingleLocation, availableInjProviders, globalTimeMode, globalPeriodCount, chartTimeOverrides]);
 
   // ── Aggregated weekly revenue vs budget (+ per-location breakdowns) ──
   const { revChartData, revChartSeries } = useMemo(() => {
@@ -3962,8 +4205,8 @@ export default function PerformanceTracker({ initialLocTypes, initialPractices, 
               series={cancelSeries}
               height={300}
               formatter={fmtPct}
-              colorMap={{ Total: V.gold, ...locationColorMap }}
-              rightAxisSeries={cancelLocs.filter(n => n !== 'Total')}
+              colorMap={cancelIsProviderMode ? providerColorMap : { Total: V.gold, ...locationColorMap }}
+              rightAxisSeries={cancelIsProviderMode ? [] : cancelLocs.filter(n => n !== TOTAL)}
             />
           </ChartCard>
           <ChartCard
@@ -3994,8 +4237,8 @@ export default function PerformanceTracker({ initialLocTypes, initialPractices, 
               series={noshowSeries}
               height={300}
               formatter={fmtPct}
-              colorMap={{ Total: V.gold, ...locationColorMap }}
-              rightAxisSeries={noshowLocs.filter(n => n !== 'Total')}
+              colorMap={noshowIsProviderMode ? providerColorMap : { Total: V.gold, ...locationColorMap }}
+              rightAxisSeries={noshowIsProviderMode ? [] : noshowLocs.filter(n => n !== TOTAL)}
             />
           </ChartCard>
         </div>
@@ -4030,8 +4273,8 @@ export default function PerformanceTracker({ initialLocTypes, initialPractices, 
               series={utilizationSeries}
               height={300}
               formatter={fmtPct}
-              colorMap={{ Total: V.gold, ...locationColorMap }}
-              rightAxisSeries={utilizationLocs.filter(n => n !== TOTAL)}
+              colorMap={utilizationIsProviderMode ? providerColorMap : { Total: V.gold, ...locationColorMap }}
+              rightAxisSeries={utilizationIsProviderMode ? [] : utilizationLocs.filter(n => n !== TOTAL)}
             />
           </ChartCard>
           <ChartCard
@@ -4047,6 +4290,13 @@ export default function PerformanceTracker({ initialLocTypes, initialPractices, 
                   onChange={setNetHoursLocs}
                   minWidth={85}
                 />)}
+                {isSingleLocation && availableInjProviders.length > 0 && (<MultiSelectDropdown
+                  label="Provider"
+                  options={availableInjProviders}
+                  selected={hoursProviders || availableInjProviders}
+                  onChange={setHoursProviders}
+                  minWidth={85}
+                />)}
               </div>
             }
           >
@@ -4055,8 +4305,8 @@ export default function PerformanceTracker({ initialLocTypes, initialPractices, 
               series={netHoursSeries}
               height={300}
               formatter={(v) => v != null ? `${v.toLocaleString()} hrs` : ''}
-              colorMap={{ Total: V.gold, ...locationColorMap }}
-              rightAxisSeries={netHoursLocs.filter(n => n !== TOTAL)}
+              colorMap={netHoursIsProviderMode ? providerColorMap : { Total: V.gold, ...locationColorMap }}
+              rightAxisSeries={netHoursIsProviderMode ? [] : netHoursLocs.filter(n => n !== TOTAL)}
             />
           </ChartCard>
         </div>
@@ -4086,6 +4336,13 @@ export default function PerformanceTracker({ initialLocTypes, initialPractices, 
                   onChange={setInjSalesLocs}
                   minWidth={85}
                 />)}
+                {isSingleLocation && availableInjProviders.length > 0 && (<MultiSelectDropdown
+                  label="Provider"
+                  options={availableInjProviders}
+                  selected={injSalesProviders || availableInjProviders}
+                  onChange={setInjSalesProviders}
+                  minWidth={85}
+                />)}
               </div>
             }
           >
@@ -4094,8 +4351,8 @@ export default function PerformanceTracker({ initialLocTypes, initialPractices, 
               series={injSalesSeries}
               height={300}
               formatter={fmtK}
-              colorMap={{ Total: V.gold, ...locationColorMap }}
-              rightAxisSeries={injSalesLocs.filter(n => n !== 'Total')}
+              colorMap={injSalesIsProviderMode ? providerColorMap : { Total: V.gold, ...locationColorMap }}
+              rightAxisSeries={injSalesIsProviderMode ? [] : injSalesLocs.filter(n => n !== 'Total')}
             />
           </ChartCard>
           <ChartCard
@@ -4111,6 +4368,13 @@ export default function PerformanceTracker({ initialLocTypes, initialPractices, 
                   onChange={setInjPctLocs}
                   minWidth={85}
                 />)}
+                {isSingleLocation && availableInjProviders.length > 0 && (<MultiSelectDropdown
+                  label="Provider"
+                  options={availableInjProviders}
+                  selected={injPctProviders || availableInjProviders}
+                  onChange={setInjPctProviders}
+                  minWidth={85}
+                />)}
               </div>
             }
           >
@@ -4119,8 +4383,8 @@ export default function PerformanceTracker({ initialLocTypes, initialPractices, 
               series={injPctSeries}
               height={300}
               formatter={fmtPct}
-              colorMap={{ Total: V.gold, ...locationColorMap }}
-              rightAxisSeries={injPctLocs.filter(n => n !== 'Total')}
+              colorMap={injPctIsProviderMode ? providerColorMap : { Total: V.gold, ...locationColorMap }}
+              rightAxisSeries={injPctIsProviderMode ? [] : injPctLocs.filter(n => n !== 'Total')}
             />
           </ChartCard>
         </div>
