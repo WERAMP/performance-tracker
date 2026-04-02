@@ -3910,19 +3910,29 @@ export default function PerformanceTracker({ initialLocTypes, initialPractices, 
             </div>
           )}
 
-          {/* Location dropdown: show only relevant locations */}
+          {/* Location: locked label on single-location pages, dropdown on multi-location */}
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
             <label style={{
               fontSize: 10, fontWeight: 700, color: V.navy,
               letterSpacing: 1.5, textTransform: 'uppercase', fontFamily: FONT.body,
             }}>Location</label>
-            <MultiSelectDropdown
-              label="Location"
-              options={initialLocations?.length ? initialLocations : locationNames}
-              selected={globalSelectedLocs}
-              onChange={setGlobalSelectedLocs}
-              minWidth={220}
-            />
+            {isSingleLocation ? (
+              <div style={{
+                padding: '7px 12px', background: V.cream,
+                border: `1.5px solid ${V.taupe}`, borderRadius: 6,
+                fontSize: 12, fontFamily: FONT.body, color: V.navy, fontWeight: 600,
+              }}>
+                {initialLocations[0]}
+              </div>
+            ) : (
+              <MultiSelectDropdown
+                label="Location"
+                options={initialLocations?.length ? initialLocations : locationNames}
+                selected={globalSelectedLocs}
+                onChange={setGlobalSelectedLocs}
+                minWidth={220}
+              />
+            )}
           </div>
 
           <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
