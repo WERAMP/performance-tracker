@@ -904,26 +904,38 @@ function LocationReport({ location, locations, metrics, opsData, btxData, syring
 
     let periodWeeks;
     let periodLabel;
+    const todayStr = todayD.toISOString().slice(0, 10);
+    const weekOverlaps = (w, fromDate, toDate) => {
+      const wStart = new Date(w + 'T00:00:00');
+      const wEnd = new Date(wStart); wEnd.setDate(wEnd.getDate() + 6);
+      return wEnd >= fromDate && wStart <= toDate;
+    };
     if (reportPeriod === 'MTD') {
-      // Include any week that has at least one day in the current calendar month
-      periodWeeks = allWeeks.filter(w => {
-        const wStart = new Date(w + 'T00:00:00');
-        const wEnd = new Date(wStart); wEnd.setDate(wEnd.getDate() + 6);
-        const inOrAfterMonthStart = wEnd.getFullYear() > currentYear ||
-          (wEnd.getFullYear() === currentYear && wEnd.getMonth() >= currentMonth);
-        const inOrBeforeMonthEnd = wStart.getFullYear() < currentYear ||
-          (wStart.getFullYear() === currentYear && wStart.getMonth() <= currentMonth);
-        return inOrAfterMonthStart && inOrBeforeMonthEnd;
-      });
-      const monthName = new Date(currentYear, currentMonth, 1).toLocaleDateString('en-US', { month: 'short' });
-      periodLabel = `${monthName} 1 - ${fmtDateInner(todayD.toISOString().slice(0, 10))}, ${currentYear}`;
+      const from = new Date(currentYear, currentMonth, 1);
+      periodWeeks = allWeeks.filter(w => weekOverlaps(w, from, todayD));
+      const monthName = from.toLocaleDateString('en-US', { month: 'short' });
+      periodLabel = `${monthName} 1 - ${fmtDateInner(todayStr)}, ${currentYear}`;
+    } else if (reportPeriod === 'QTD') {
+      const currentQuarter = Math.floor(currentMonth / 3);
+      const from = new Date(currentYear, currentQuarter * 3, 1);
+      periodWeeks = allWeeks.filter(w => weekOverlaps(w, from, todayD));
+      const qStart = from.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+      periodLabel = `${qStart} - ${fmtDateInner(todayStr)}, ${currentYear}`;
+    } else if (reportPeriod === 'YTD') {
+      const from = new Date(currentYear, 0, 1);
+      periodWeeks = allWeeks.filter(w => weekOverlaps(w, from, todayD));
+      periodLabel = `Jan 1 - ${fmtDateInner(todayStr)}, ${currentYear}`;
+    } else if (reportPeriod === 'L30') {
+      const from = new Date(todayD); from.setDate(from.getDate() - 30);
+      periodWeeks = allWeeks.filter(w => weekOverlaps(w, from, todayD));
+      periodLabel = `${fmtDateInner(from.toISOString().slice(0, 10))} - ${fmtDateInner(todayStr)}, ${currentYear}`;
+    } else if (reportPeriod === 'L60') {
+      const from = new Date(todayD); from.setDate(from.getDate() - 60);
+      periodWeeks = allWeeks.filter(w => weekOverlaps(w, from, todayD));
+      periodLabel = `${fmtDateInner(from.toISOString().slice(0, 10))} - ${fmtDateInner(todayStr)}, ${currentYear}`;
     } else {
-      // YTD: any week whose end date falls in or after Jan 1 of current year
-      periodWeeks = allWeeks.filter(w => {
-        const wEnd = new Date(w + 'T00:00:00'); wEnd.setDate(wEnd.getDate() + 6);
-        return wEnd.getFullYear() >= currentYear;
-      });
-      periodLabel = `Jan 1 - ${fmtDateInner(todayD.toISOString().slice(0, 10))}, ${currentYear}`;
+      periodWeeks = allWeeks.slice(-4);
+      periodLabel = `${fmtDateInner(periodWeeks[0])} - ${fmtDateInner(periodWeeks[periodWeeks.length - 1])}, ${currentYear}`;
     }
     const periodSet = new Set(periodWeeks);
 
@@ -1447,19 +1459,19 @@ function LocationReport({ location, locations, metrics, opsData, btxData, syring
         {/* Period selector */}
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
           <span style={{ fontSize: 10, fontFamily: FONT.body, color: 'rgba(255,255,255,0.55)', letterSpacing: 0.8, textTransform: 'uppercase' }}>Period</span>
-          {['MTD', 'YTD'].map(p => (
+          {[['MTD','MTD'], ['QTD','QTD'], ['YTD','YTD'], ['L30','Last 30'], ['L60','Last 60']].map(([key, label]) => (
             <button
-              key={p}
-              onClick={() => setReportPeriod(p)}
+              key={key}
+              onClick={() => setReportPeriod(key)}
               style={{
                 fontSize: 11, fontFamily: FONT.body, fontWeight: 700,
-                padding: '4px 14px', borderRadius: 20, cursor: 'pointer',
-                border: reportPeriod === p ? 'none' : `1px solid rgba(255,255,255,0.3)`,
-                background: reportPeriod === p ? V.gold : 'transparent',
-                color: reportPeriod === p ? V.navy : 'rgba(255,255,255,0.75)',
-                letterSpacing: 0.5, transition: 'all 0.15s',
+                padding: '4px 12px', borderRadius: 20, cursor: 'pointer',
+                border: reportPeriod === key ? 'none' : `1px solid rgba(255,255,255,0.3)`,
+                background: reportPeriod === key ? V.gold : 'transparent',
+                color: reportPeriod === key ? V.navy : 'rgba(255,255,255,0.75)',
+                letterSpacing: 0.5, transition: 'all 0.15s', whiteSpace: 'nowrap',
               }}
-            >{p}</button>
+            >{label}</button>
           ))}
         </div>
       </div>
