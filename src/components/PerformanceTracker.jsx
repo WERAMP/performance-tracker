@@ -905,37 +905,46 @@ function LocationReport({ location, locations, metrics, opsData, btxData, syring
     let periodWeeks;
     let periodLabel;
     const todayStr = todayD.toISOString().slice(0, 10);
+    // A weekly bucket overlaps a period if the week has ANY day inside [fromDate, toDate]
     const weekOverlaps = (w, fromDate, toDate) => {
       const wStart = new Date(w + 'T00:00:00');
       const wEnd = new Date(wStart); wEnd.setDate(wEnd.getDate() + 6);
       return wEnd >= fromDate && wStart <= toDate;
     };
     if (reportPeriod === 'MTD') {
+      // Full calendar month — from the 1st through the last day of the current month
       const from = new Date(currentYear, currentMonth, 1);
-      periodWeeks = allWeeks.filter(w => weekOverlaps(w, from, todayD));
+      const to   = new Date(currentYear, currentMonth + 1, 0); // last day of month
+      periodWeeks = allWeeks.filter(w => weekOverlaps(w, from, to));
       const monthName = from.toLocaleDateString('en-US', { month: 'short' });
-      periodLabel = `${monthName} 1 - ${fmtDateInner(todayStr)}, ${currentYear}`;
+      periodLabel = `${monthName} 1 – ${monthName} ${to.getDate()}, ${currentYear}`;
     } else if (reportPeriod === 'QTD') {
+      // Full calendar quarter — 1st day through last day of current quarter
       const currentQuarter = Math.floor(currentMonth / 3);
       const from = new Date(currentYear, currentQuarter * 3, 1);
-      periodWeeks = allWeeks.filter(w => weekOverlaps(w, from, todayD));
-      const qStart = from.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-      periodLabel = `${qStart} - ${fmtDateInner(todayStr)}, ${currentYear}`;
+      const to   = new Date(currentYear, (currentQuarter + 1) * 3, 0);
+      periodWeeks = allWeeks.filter(w => weekOverlaps(w, from, to));
+      const qStartLabel = from.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+      const qEndLabel   = to.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+      periodLabel = `${qStartLabel} – ${qEndLabel}, ${currentYear}`;
     } else if (reportPeriod === 'YTD') {
+      // Year to date — Jan 1 through today
       const from = new Date(currentYear, 0, 1);
       periodWeeks = allWeeks.filter(w => weekOverlaps(w, from, todayD));
-      periodLabel = `Jan 1 - ${fmtDateInner(todayStr)}, ${currentYear}`;
+      periodLabel = `Jan 1 – ${fmtDateInner(todayStr)}, ${currentYear}`;
     } else if (reportPeriod === 'L30') {
-      const from = new Date(todayD); from.setDate(from.getDate() - 30);
+      // Rolling 30 days — exactly 30 days back through today
+      const from = new Date(todayD); from.setDate(from.getDate() - 29);
       periodWeeks = allWeeks.filter(w => weekOverlaps(w, from, todayD));
-      periodLabel = `${fmtDateInner(from.toISOString().slice(0, 10))} - ${fmtDateInner(todayStr)}, ${currentYear}`;
+      periodLabel = `${fmtDateInner(from.toISOString().slice(0, 10))} – ${fmtDateInner(todayStr)}, ${currentYear}`;
     } else if (reportPeriod === 'L60') {
-      const from = new Date(todayD); from.setDate(from.getDate() - 60);
+      // Rolling 60 days — exactly 60 days back through today
+      const from = new Date(todayD); from.setDate(from.getDate() - 59);
       periodWeeks = allWeeks.filter(w => weekOverlaps(w, from, todayD));
-      periodLabel = `${fmtDateInner(from.toISOString().slice(0, 10))} - ${fmtDateInner(todayStr)}, ${currentYear}`;
+      periodLabel = `${fmtDateInner(from.toISOString().slice(0, 10))} – ${fmtDateInner(todayStr)}, ${currentYear}`;
     } else {
       periodWeeks = allWeeks.slice(-4);
-      periodLabel = `${fmtDateInner(periodWeeks[0])} - ${fmtDateInner(periodWeeks[periodWeeks.length - 1])}, ${currentYear}`;
+      periodLabel = `${fmtDateInner(periodWeeks[0])} – ${fmtDateInner(periodWeeks[periodWeeks.length - 1])}, ${currentYear}`;
     }
     const periodSet = new Set(periodWeeks);
 
