@@ -885,7 +885,7 @@ function buildOpsChart(opsData, filteredNames, opsNameMap, valueKey) {
 //  Location Performance Report (collapsible, shown for single location)
 // ══════════════════════════════════════════════════════════════
 
-function LocationReport({ location, locations, metrics, opsData, btxData, syringeLocData, utilizationData, providerHoursData, injRevProviderData, btxProviderData, syringeProvData, revCollProvData }) {
+function LocationReport({ location, locations, metrics, opsData, btxData, syringeLocData, utilizationData, providerHoursData, injRevProviderData, btxProviderData, syringeProvData, revCollProvData, budgetData }) {
   const [expandedSections, setExpandedSections] = useState({ kpi: false, efficiency: false, providers: false, recommendations: false });
   const toggleSection = (key) => setExpandedSections(prev => ({ ...prev, [key]: !prev[key] }));
   const [reportPeriod, setReportPeriod] = useState('MTD');
@@ -981,6 +981,8 @@ function LocationReport({ location, locations, metrics, opsData, btxData, syring
 
     const locColl = sum4(metrics, location, 'co');
     const locCollPct = locRev > 0 ? locColl / locRev * 100 : null;
+    const locRevBudget = sum4(budgetData || [], location, 'b');
+    const locCollBudget = sum4(budgetData || [], location, 'cb');
     const peerColl = peers.reduce((s, p) => s + sum4(metrics, p, 'co'), 0);
     const peerCollPct = peerRev > 0 ? peerColl / peerRev * 100 : null;
 
@@ -1317,6 +1319,9 @@ function LocationReport({ location, locations, metrics, opsData, btxData, syring
     return {
       locType, peers,
       periodLabel,
+      // Top-level KPI values for the 6 summary boxes
+      locRev, locColl, locRevBudget, locCollBudget,
+      locRevPerPt, locRetailPct, locUtil, locCancelRate, locNoshowRate,
       kpis: [
         { name: 'Avg Revenue Per Patient', value: locRevPerPt, peerAvg: peerRevPerPt, goal: null, format: 'dollar', higherBetter: true, trend: revPerPtTrend },
         { name: 'Retail % of Sales', value: locRetailPct, peerAvg: peerRetailPct, goal: 7.5, format: 'pct', higherBetter: true, trend: retailPctTrend },
@@ -1342,7 +1347,7 @@ function LocationReport({ location, locations, metrics, opsData, btxData, syring
       // Section 4 data
       quickWins, recommendations: topRecs,
     };
-  }, [location, locations, metrics, opsData, btxData, syringeLocData, utilizationData, providerHoursData, injRevProviderData, btxProviderData, syringeProvData, revCollProvData, reportPeriod]);
+  }, [location, locations, metrics, opsData, btxData, syringeLocData, utilizationData, providerHoursData, injRevProviderData, btxProviderData, syringeProvData, revCollProvData, budgetData, reportPeriod]);
 
   if (!reportData) return null;
 
@@ -1486,19 +1491,94 @@ function LocationReport({ location, locations, metrics, opsData, btxData, syring
       </div>
 
       <div style={{ padding: '24px 28px 28px' }}>
-        {/* Report Header */}
+        {/* Report Header — location name + 6 KPI summary boxes */}
         <div style={{ marginBottom: 24 }}>
-          <h2 style={{
-            fontFamily: FONT.heading, fontSize: 28, fontWeight: 400,
-            color: V.navy, margin: '0 0 6px',
-          }}>{location}</h2>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
-            <span style={{ fontSize: 12, fontFamily: FONT.body, color: V.gray }}>
-              Period: {reportData.periodLabel}
-            </span>
-            <span style={{ fontSize: 11, fontFamily: FONT.body, color: V.blush, fontStyle: 'italic' }}>
-              Generated {today}
-            </span>
+          {/* Row: location name (left) + KPI boxes (right) */}
+          <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', flexWrap: 'wrap', gap: 16, marginBottom: 8 }}>
+            {/* Left: name + period */}
+            <div>
+              <h2 style={{
+                fontFamily: FONT.heading, fontSize: 28, fontWeight: 400,
+                color: V.navy, margin: '0 0 4px',
+              }}>{location}</h2>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+                <span style={{ fontSize: 12, fontFamily: FONT.body, color: V.gray }}>
+                  Period: {reportData.periodLabel}
+                </span>
+                <span style={{ fontSize: 11, fontFamily: FONT.body, color: V.blush, fontStyle: 'italic' }}>
+                  Generated {today}
+                </span>
+              </div>
+            </div>
+            {/* Right: 6 navy KPI boxes */}
+            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+              {(() => {
+                const rd = reportData;
+                const cancelNs = (rd.locCancelRate != null ? rd.locCancelRate : 0) + (rd.locNoshowRate != null ? rd.locNoshowRate : 0);
+                const cancelNsNull = rd.locCancelRate == null && rd.locNoshowRate == null;
+
+                const boxes = [
+                  {
+                    label: 'Sales',
+                    value: rd.locRev != null ? `$${Math.round(rd.locRev).toLocaleString()}` : '--',
+                    goal: rd.locRevBudget > 0 ? `Goal $${Math.round(rd.locRevBudget).toLocaleString()}` : null,
+                    above: rd.locRevBudget > 0 ? rd.locRev >= rd.locRevBudget : null,
+                  },
+                  {
+                    label: 'Collections',
+                    value: rd.locColl != null ? `$${Math.round(rd.locColl).toLocaleString()}` : '--',
+                    goal: rd.locCollBudget > 0 ? `Goal $${Math.round(rd.locCollBudget).toLocaleString()}` : null,
+                    above: rd.locCollBudget > 0 ? rd.locColl >= rd.locCollBudget : null,
+                  },
+                  {
+                    label: 'Rev / Patient',
+                    value: rd.locRevPerPt != null ? `$${Math.round(rd.locRevPerPt).toLocaleString()}` : '--',
+                    goal: 'Goal $500',
+                    above: rd.locRevPerPt != null ? rd.locRevPerPt >= 500 : null,
+                  },
+                  {
+                    label: 'Utilization',
+                    value: rd.locUtil != null ? `${rd.locUtil.toFixed(1)}%` : '--',
+                    goal: 'Goal 70%',
+                    above: rd.locUtil != null ? rd.locUtil >= 70 : null,
+                  },
+                  {
+                    label: 'Cancel + NS',
+                    value: cancelNsNull ? '--' : `${cancelNs.toFixed(1)}%`,
+                    goal: 'Goal <5%',
+                    above: cancelNsNull ? null : cancelNs < 5, // lower is better
+                  },
+                  {
+                    label: 'Retail %',
+                    value: rd.locRetailPct != null ? `${rd.locRetailPct.toFixed(1)}%` : '--',
+                    goal: 'Goal 7.5%',
+                    above: rd.locRetailPct != null ? rd.locRetailPct >= 7.5 : null,
+                  },
+                ];
+
+                return boxes.map(box => (
+                  <div key={box.label} style={{
+                    background: V.navy, borderRadius: 8, padding: '10px 14px',
+                    minWidth: 90, textAlign: 'center', display: 'flex', flexDirection: 'column', gap: 3,
+                  }}>
+                    <div style={{ fontSize: 9, fontFamily: FONT.body, fontWeight: 700, letterSpacing: 1.2, textTransform: 'uppercase', color: 'rgba(185,151,91,0.85)' }}>
+                      {box.label}
+                    </div>
+                    <div style={{ fontFamily: FONT.heading, fontSize: 17, color: V.white, lineHeight: 1.2 }}>
+                      {box.value}
+                    </div>
+                    {box.goal && (
+                      <div style={{
+                        fontSize: 10, fontFamily: FONT.body, fontWeight: 600,
+                        color: box.above == null ? 'rgba(255,255,255,0.45)' : box.above ? '#4CAF50' : '#EF5350',
+                      }}>
+                        {box.goal}
+                      </div>
+                    )}
+                  </div>
+                ));
+              })()}
+            </div>
           </div>
         </div>
 
@@ -4014,6 +4094,7 @@ export default function PerformanceTracker({ initialLocTypes, initialPractices, 
             btxProviderData={btxProviderData}
             syringeProvData={syringeProvData}
             revCollProvData={revCollProvData}
+            budgetData={budgetData}
           />
         )}
 
