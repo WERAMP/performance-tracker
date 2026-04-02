@@ -3951,24 +3951,26 @@ export default function PerformanceTracker({ initialLocTypes, initialPractices, 
             )}
           </div>
 
-          <button
-            onClick={() => { setSelectedLocTypes([]); setSelectedPractices([]); setGlobalSelectedLocs([]); const T = ['Total']; allChartSetters.forEach(s => s([...T])); setInjRevProviders(null); setBtxProviders(null); setGlobalTimeMode('weekly'); setGlobalPeriodCount(12); setChartTimeOverrides({}); }}
-            style={{
-              marginLeft: 'auto', padding: '7px 16px',
-              background: 'transparent', color: V.navy,
-              border: `1.5px solid ${V.taupe}`, borderRadius: 5,
-              fontFamily: FONT.body, fontSize: 11, fontWeight: 600,
-              cursor: 'pointer', letterSpacing: 0.3,
-            }}
-          >Clear Filters</button>
+          {!isSingleLocation && (<>
+            <button
+              onClick={() => { setSelectedLocTypes([]); setSelectedPractices([]); setGlobalSelectedLocs([]); const T = ['Total']; allChartSetters.forEach(s => s([...T])); setInjRevProviders(null); setBtxProviders(null); setGlobalTimeMode('weekly'); setGlobalPeriodCount(12); setChartTimeOverrides({}); }}
+              style={{
+                marginLeft: 'auto', padding: '7px 16px',
+                background: 'transparent', color: V.navy,
+                border: `1.5px solid ${V.taupe}`, borderRadius: 5,
+                fontFamily: FONT.body, fontSize: 11, fontWeight: 600,
+                cursor: 'pointer', letterSpacing: 0.3,
+              }}
+            >Clear Filters</button>
 
-          <div style={{
-            padding: '7px 13px', background: V.gold, color: V.navy,
-            fontFamily: FONT.body, fontSize: 10, fontWeight: 700,
-            letterSpacing: 0.3, borderRadius: 5,
-          }}>
-            {filteredLocations.length} of {locations.length} Locations
-          </div>
+            <div style={{
+              padding: '7px 13px', background: V.gold, color: V.navy,
+              fontFamily: FONT.body, fontSize: 10, fontWeight: 700,
+              letterSpacing: 0.3, borderRadius: 5,
+            }}>
+              {filteredLocations.length} of {locations.length} Locations
+            </div>
+          </>)}
         </div>
 
 
