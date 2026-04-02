@@ -888,6 +888,7 @@ function buildOpsChart(opsData, filteredNames, opsNameMap, valueKey) {
 function LocationReport({ location, locations, metrics, opsData, btxData, syringeLocData, utilizationData, providerHoursData, injRevProviderData, btxProviderData, syringeProvData, revCollProvData }) {
   const [expandedSections, setExpandedSections] = useState({ kpi: false, efficiency: false, providers: false, recommendations: false });
   const toggleSection = (key) => setExpandedSections(prev => ({ ...prev, [key]: !prev[key] }));
+  const [reportPeriod, setReportPeriod] = useState('MTD');
 
   const reportData = useMemo(() => {
     if (!location || !locations.length || !metrics.length) return null;
@@ -896,19 +897,46 @@ function LocationReport({ location, locations, metrics, opsData, btxData, syring
     const locType = locObj?.types?.[0] || '';
     const peers = locations.filter(l => l.types?.includes(locType)).map(l => l.name);
     const allWeeks = [...new Set(metrics.map(r => r.w))].sort();
-    const last4Weeks = allWeeks.slice(-4);
-    const last4Set = new Set(last4Weeks);
+    const todayD = new Date();
+    const currentYear = todayD.getFullYear();
+    const currentMonth = todayD.getMonth(); // 0-indexed
+    const fmtDateInner = (ds) => new Date(ds + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+
+    let periodWeeks;
+    let periodLabel;
+    if (reportPeriod === 'MTD') {
+      // Include any week that has at least one day in the current calendar month
+      periodWeeks = allWeeks.filter(w => {
+        const wStart = new Date(w + 'T00:00:00');
+        const wEnd = new Date(wStart); wEnd.setDate(wEnd.getDate() + 6);
+        const inOrAfterMonthStart = wEnd.getFullYear() > currentYear ||
+          (wEnd.getFullYear() === currentYear && wEnd.getMonth() >= currentMonth);
+        const inOrBeforeMonthEnd = wStart.getFullYear() < currentYear ||
+          (wStart.getFullYear() === currentYear && wStart.getMonth() <= currentMonth);
+        return inOrAfterMonthStart && inOrBeforeMonthEnd;
+      });
+      const monthName = new Date(currentYear, currentMonth, 1).toLocaleDateString('en-US', { month: 'short' });
+      periodLabel = `${monthName} 1 - ${fmtDateInner(todayD.toISOString().slice(0, 10))}, ${currentYear}`;
+    } else {
+      // YTD: any week whose end date falls in or after Jan 1 of current year
+      periodWeeks = allWeeks.filter(w => {
+        const wEnd = new Date(w + 'T00:00:00'); wEnd.setDate(wEnd.getDate() + 6);
+        return wEnd.getFullYear() >= currentYear;
+      });
+      periodLabel = `Jan 1 - ${fmtDateInner(todayD.toISOString().slice(0, 10))}, ${currentYear}`;
+    }
+    const periodSet = new Set(periodWeeks);
 
     // Helpers using ACTUAL JSON field names
     const avg = (data, locName, field) => {
       if (!data || !data.length) return null;
-      const rows = data.filter(r => r.c === locName && last4Set.has(r.w));
+      const rows = data.filter(r => r.c === locName && periodSet.has(r.w));
       if (!rows.length) return null;
       return rows.reduce((s, r) => s + (Number(r[field]) || 0), 0) / rows.length;
     };
     const sum4 = (data, locName, field) => {
       if (!data || !data.length) return 0;
-      return data.filter(r => r.c === locName && last4Set.has(r.w)).reduce((s, r) => s + (Number(r[field]) || 0), 0);
+      return data.filter(r => r.c === locName && periodSet.has(r.w)).reduce((s, r) => s + (Number(r[field]) || 0), 0);
     };
     const avgMulti = (data, locNames, field) => {
       if (!data || !data.length) return null;
@@ -955,8 +983,8 @@ function LocationReport({ location, locations, metrics, opsData, btxData, syring
 
     // ── 4-Week Trend calculation per KPI ──
     const computeTrend = (data, locName, field, divisorData, divisorField) => {
-      if (!data || !data.length || last4Weeks.length < 2) return null;
-      const sorted = data.filter(r => r.c === locName && last4Set.has(r.w)).sort((a, b) => a.w.localeCompare(b.w));
+      if (!data || !data.length || periodWeeks.length < 2) return null;
+      const sorted = data.filter(r => r.c === locName && periodSet.has(r.w)).sort((a, b) => a.w.localeCompare(b.w));
       if (sorted.length < 2) return null;
       const half = Math.ceil(sorted.length / 2);
       const first = sorted.slice(0, half);
@@ -970,7 +998,7 @@ function LocationReport({ location, locations, metrics, opsData, btxData, syring
 
     // Per-KPI trends
     const revPerPtTrend = (() => {
-      const sorted = metrics.filter(r => r.c === location && last4Set.has(r.w)).sort((a, b) => a.w.localeCompare(b.w));
+      const sorted = metrics.filter(r => r.c === location && periodSet.has(r.w)).sort((a, b) => a.w.localeCompare(b.w));
       if (sorted.length < 2) return null;
       const half = Math.ceil(sorted.length / 2);
       const avgRpp = (rows) => {
@@ -984,7 +1012,7 @@ function LocationReport({ location, locations, metrics, opsData, btxData, syring
     })();
 
     const retailPctTrend = (() => {
-      const sorted = metrics.filter(r => r.c === location && last4Set.has(r.w)).sort((a, b) => a.w.localeCompare(b.w));
+      const sorted = metrics.filter(r => r.c === location && periodSet.has(r.w)).sort((a, b) => a.w.localeCompare(b.w));
       if (sorted.length < 2) return null;
       const half = Math.ceil(sorted.length / 2);
       const avgPct = (rows) => {
@@ -998,7 +1026,7 @@ function LocationReport({ location, locations, metrics, opsData, btxData, syring
     })();
 
     const injPctTrend = (() => {
-      const sorted = metrics.filter(r => r.c === location && last4Set.has(r.w)).sort((a, b) => a.w.localeCompare(b.w));
+      const sorted = metrics.filter(r => r.c === location && periodSet.has(r.w)).sort((a, b) => a.w.localeCompare(b.w));
       if (sorted.length < 2) return null;
       const half = Math.ceil(sorted.length / 2);
       const avgPct = (rows) => {
@@ -1012,7 +1040,7 @@ function LocationReport({ location, locations, metrics, opsData, btxData, syring
     })();
 
     const collPctTrend = (() => {
-      const sorted = metrics.filter(r => r.c === location && last4Set.has(r.w)).sort((a, b) => a.w.localeCompare(b.w));
+      const sorted = metrics.filter(r => r.c === location && periodSet.has(r.w)).sort((a, b) => a.w.localeCompare(b.w));
       if (sorted.length < 2) return null;
       const half = Math.ceil(sorted.length / 2);
       const avgPct = (rows) => {
@@ -1033,7 +1061,7 @@ function LocationReport({ location, locations, metrics, opsData, btxData, syring
     const patientTrend = computeTrend(metrics, location, 'p');
 
     // Revenue trend (overall)
-    const locMetrics4 = metrics.filter(r => r.c === location && last4Set.has(r.w)).sort((a, b) => a.w.localeCompare(b.w));
+    const locMetrics4 = metrics.filter(r => r.c === location && periodSet.has(r.w)).sort((a, b) => a.w.localeCompare(b.w));
     const half = Math.ceil(locMetrics4.length / 2);
     const firstHalf = locMetrics4.slice(0, half);
     const secondHalf = locMetrics4.slice(half);
@@ -1056,17 +1084,17 @@ function LocationReport({ location, locations, metrics, opsData, btxData, syring
     // ── Section 3: Provider Performance ──
     const providerCards = (() => {
       if (!injRevProviderData || !injRevProviderData.length) return [];
-      const provRows = injRevProviderData.filter(r => r.c === location && last4Set.has(r.w));
+      const provRows = injRevProviderData.filter(r => r.c === location && periodSet.has(r.w));
       const providerNames = [...new Set(provRows.map(r => r.pr))].filter(Boolean);
 
       // Peer averages for provider-level metrics
-      const peerInjRevRows = injRevProviderData.filter(r => peers.includes(r.c) && last4Set.has(r.w));
+      const peerInjRevRows = injRevProviderData.filter(r => peers.includes(r.c) && periodSet.has(r.w));
       const allPeerProviders = [...new Set(peerInjRevRows.map(r => r.pr))];
       const peerAvgInjRev = allPeerProviders.length > 0
         ? allPeerProviders.map(pr => peerInjRevRows.filter(r => r.pr === pr).reduce((s, r) => s + (Number(r.r) || 0), 0)).reduce((s, v) => s + v, 0) / allPeerProviders.length
         : null;
 
-      const peerBtxRows = (btxProviderData || []).filter(r => peers.includes(r.c) && last4Set.has(r.w));
+      const peerBtxRows = (btxProviderData || []).filter(r => peers.includes(r.c) && periodSet.has(r.w));
       const peerBtxProviders = [...new Set(peerBtxRows.map(r => r.pr))];
       const peerAvgBtx = peerBtxProviders.length > 0
         ? (() => {
@@ -1076,7 +1104,7 @@ function LocationReport({ location, locations, metrics, opsData, btxData, syring
         })()
         : null;
 
-      const peerSyrRows = (syringeProvData || []).filter(r => peers.includes(r.c) && last4Set.has(r.w));
+      const peerSyrRows = (syringeProvData || []).filter(r => peers.includes(r.c) && periodSet.has(r.w));
       const peerSyrProviders = [...new Set(peerSyrRows.map(r => r.pr))];
       const peerAvgSyrInj = peerSyrProviders.length > 0
         ? (() => {
@@ -1097,7 +1125,7 @@ function LocationReport({ location, locations, metrics, opsData, btxData, syring
         })()
         : null;
 
-      const peerRevCollRows = (revCollProvData || []).filter(r => peers.includes(r.c) && last4Set.has(r.w));
+      const peerRevCollRows = (revCollProvData || []).filter(r => peers.includes(r.c) && periodSet.has(r.w));
       const peerRevCollProviders = [...new Set(peerRevCollRows.map(r => r.pr))];
       const peerAvgCollPct = peerRevCollProviders.length > 0
         ? (() => {
@@ -1113,18 +1141,18 @@ function LocationReport({ location, locations, metrics, opsData, btxData, syring
         const injRev = prInjRows.reduce((s, r) => s + (Number(r.r) || 0), 0);
 
         // Botox units (weighted avg)
-        const prBtxRows = (btxProviderData || []).filter(r => r.c === location && r.pr === pr && last4Set.has(r.w));
+        const prBtxRows = (btxProviderData || []).filter(r => r.c === location && r.pr === pr && periodSet.has(r.w));
         const btxTotal = prBtxRows.reduce((s, r) => s + (Number(r.b) || 0) * (Number(r.n) || 1), 0);
         const btxN = prBtxRows.reduce((s, r) => s + (Number(r.n) || 1), 0);
         const avgBtx = btxN > 0 ? btxTotal / btxN : null;
 
         // Syringe data
-        const prSyrRows = (syringeProvData || []).filter(r => r.c === location && r.pr === pr && last4Set.has(r.w));
+        const prSyrRows = (syringeProvData || []).filter(r => r.c === location && r.pr === pr && periodSet.has(r.w));
         const avgSyrInj = prSyrRows.length ? prSyrRows.reduce((s, r) => s + (Number(r.si) || 0), 0) / prSyrRows.length : null;
         const avgSyrFiller = prSyrRows.length ? prSyrRows.reduce((s, r) => s + (Number(r.sf) || 0), 0) / prSyrRows.length : null;
 
         // Collections %
-        const prCollRows = (revCollProvData || []).filter(r => r.c === location && r.pr === pr && last4Set.has(r.w));
+        const prCollRows = (revCollProvData || []).filter(r => r.c === location && r.pr === pr && periodSet.has(r.w));
         const prRev = prCollRows.reduce((s, r) => s + (Number(r.rev) || 0), 0);
         const prCollVal = prCollRows.reduce((s, r) => s + (Number(r.coll) || 0), 0);
         const collPct = prRev > 0 ? (prCollVal / prRev) * 100 : null;
@@ -1163,10 +1191,7 @@ function LocationReport({ location, locations, metrics, opsData, btxData, syring
     if (locCancelRate != null) { if (locCancelRate <= 5) improved.push('Cancellation Rate'); else declined.push('Cancellation Rate'); }
     if (locUtil != null) { if (locUtil >= 70) improved.push('Utilization'); else declined.push('Utilization'); }
 
-    // Date range
-    const fmtDate = (ds) => new Date(ds + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-    const periodStart = last4Weeks[0];
-    const periodEnd = last4Weeks[last4Weeks.length - 1];
+    // (period label already computed above in reportPeriod block)
 
     // ── Section 4: Enhanced Recommendations ──
     const recommendations = [];
@@ -1270,7 +1295,7 @@ function LocationReport({ location, locations, metrics, opsData, btxData, syring
 
     return {
       locType, peers,
-      periodLabel: `${fmtDate(periodStart)} - ${fmtDate(periodEnd)}, ${new Date(periodEnd + 'T00:00:00').getFullYear()}`,
+      periodLabel,
       kpis: [
         { name: 'Avg Revenue Per Patient', value: locRevPerPt, peerAvg: peerRevPerPt, goal: null, format: 'dollar', higherBetter: true, trend: revPerPtTrend },
         { name: 'Retail % of Sales', value: locRetailPct, peerAvg: peerRetailPct, goal: 7.5, format: 'pct', higherBetter: true, trend: retailPctTrend },
@@ -1296,7 +1321,7 @@ function LocationReport({ location, locations, metrics, opsData, btxData, syring
       // Section 4 data
       quickWins, recommendations: topRecs,
     };
-  }, [location, locations, metrics, opsData, btxData, syringeLocData, utilizationData, providerHoursData, injRevProviderData, btxProviderData, syringeProvData, revCollProvData]);
+  }, [location, locations, metrics, opsData, btxData, syringeLocData, utilizationData, providerHoursData, injRevProviderData, btxProviderData, syringeProvData, revCollProvData, reportPeriod]);
 
   if (!reportData) return null;
 
@@ -1419,6 +1444,24 @@ function LocationReport({ location, locations, metrics, opsData, btxData, syring
             borderRadius: 12, letterSpacing: 0.5, textTransform: 'uppercase',
           }}>{reportData.locType}</span>
         </div>
+        {/* Period selector */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <span style={{ fontSize: 10, fontFamily: FONT.body, color: 'rgba(255,255,255,0.55)', letterSpacing: 0.8, textTransform: 'uppercase' }}>Period</span>
+          {['MTD', 'YTD'].map(p => (
+            <button
+              key={p}
+              onClick={() => setReportPeriod(p)}
+              style={{
+                fontSize: 11, fontFamily: FONT.body, fontWeight: 700,
+                padding: '4px 14px', borderRadius: 20, cursor: 'pointer',
+                border: reportPeriod === p ? 'none' : `1px solid rgba(255,255,255,0.3)`,
+                background: reportPeriod === p ? V.gold : 'transparent',
+                color: reportPeriod === p ? V.navy : 'rgba(255,255,255,0.75)',
+                letterSpacing: 0.5, transition: 'all 0.15s',
+              }}
+            >{p}</button>
+          ))}
+        </div>
       </div>
 
       <div style={{ padding: '24px 28px 28px' }}>
@@ -1448,7 +1491,7 @@ function LocationReport({ location, locations, metrics, opsData, btxData, syring
               }}>
                 <thead>
                   <tr style={{ borderBottom: `2px solid ${V.navy}` }}>
-                    {['KPI', 'Value', 'Peer Avg', 'Goal', 'Status', '4-Week Trend'].map(h => (
+                    {['KPI', 'Value', 'Peer Avg', 'Goal', 'Status', 'Trend'].map(h => (
                       <th key={h} style={{
                         padding: '8px 10px', textAlign: 'left', fontSize: 9, fontWeight: 700,
                         color: V.gold, letterSpacing: 1.2, textTransform: 'uppercase',
