@@ -3047,21 +3047,34 @@ export default function PerformanceTracker({ initialLocTypes, initialPractices, 
         locWeekMap[m.w][m.c] = (locWeekMap[m.w][m.c] || 0) + (m.co || 0);
       }
     });
-    // Collections budget: no separate collections budget data exists, so omit budget line entirely
-    // (previously used average collections as a flat "budget" line which was misleading)
+    // Collections budget: scope to the locations shown on the chart (same logic as revenue budget)
+    const collBudgetWeekMap = {};
+    if (budgetData.length) {
+      const budgetCenterNames = collChartLocs.includes('Total')
+        ? centerNames
+        : new Set(collChartLocs.filter(n => n !== 'Total'));
+      const budgetFiltered = budgetData.filter(b => budgetCenterNames.has(b.c));
+      budgetFiltered.forEach(b => {
+        if (!collBudgetWeekMap[b.w]) collBudgetWeekMap[b.w] = 0;
+        collBudgetWeekMap[b.w] += (b.cb || 0);
+      });
+    }
     const allWeeks = Object.keys(weekMap).sort();
     const { mode: tMode, count: tCount } = getEffectiveTime('collChart');
     const timeRange = getTimeRange(allWeeks, tMode, tCount);
+    const hasBudget = Object.keys(collBudgetWeekMap).length > 0;
 
     if (!timeRange.isMonthly) {
       const weeks = timeRange.periods;
       const data = weeks.map(w => {
+        const budgetVal = collBudgetWeekMap[w] != null ? collBudgetWeekMap[w] : null;
         const row = { week: formatWeek(w), 'All Locations': weekMap[w] || 0 };
+        if (budgetVal != null) row.Budget = budgetVal;
         collChartLocs.filter(n => n !== 'Total').forEach(loc => { row[loc] = locWeekMap[w]?.[loc] || 0; });
         return row;
       });
       const locs = collChartLocs.filter(n => n !== 'Total');
-      const series = [...(collChartLocs.includes('Total') ? ['All Locations'] : []), ...locs];
+      const series = [...(collChartLocs.includes('Total') ? ['All Locations'] : []), ...(hasBudget ? ['Budget'] : []), ...locs];
       return { collChartData: data, collChartSeries: series };
     } else {
       const months = timeRange.periods;
@@ -3070,17 +3083,19 @@ export default function PerformanceTracker({ initialLocTypes, initialPractices, 
       const data = months.map(mk => {
         const monthWeeks = allWeeks.filter(w => w.startsWith(mk));
         const coll = monthWeeks.reduce((s, w) => s + (weekMap[w] || 0), 0);
+        const bud = monthWeeks.reduce((s, w) => s + (collBudgetWeekMap[w] || 0), 0);
         const row = { week: formatMonth(mk, mk === curMonth), 'All Locations': coll };
+        if (hasBudget) row.Budget = bud;
         collChartLocs.filter(n => n !== 'Total').forEach(loc => {
           row[loc] = monthWeeks.reduce((s, w) => s + (locWeekMap[w]?.[loc] || 0), 0);
         });
         return row;
       });
       const locs = collChartLocs.filter(n => n !== 'Total');
-      const series = [...(collChartLocs.includes('Total') ? ['All Locations'] : []), ...locs];
+      const series = [...(collChartLocs.includes('Total') ? ['All Locations'] : []), ...(hasBudget ? ['Budget'] : []), ...locs];
       return { collChartData: data, collChartSeries: series };
     }
-  }, [metrics, locationNames, collChartLocs, globalTimeMode, globalPeriodCount, chartTimeOverrides]);
+  }, [metrics, locationNames, collChartLocs, budgetData, globalTimeMode, globalPeriodCount, chartTimeOverrides]);
 
   // ── MTD Summary ──
   const mtdSummary = useMemo(() => {
