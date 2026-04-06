@@ -3135,8 +3135,9 @@ export default function PerformanceTracker({ initialLocTypes, initialPractices, 
         : new Set(collChartLocs.filter(n => n !== 'Total'));
       const budgetFiltered = budgetData.filter(b => budgetCenterNames.has(b.c));
       budgetFiltered.forEach(b => {
+        if (b.cb == null) return; // no collections goal for this location — skip
         if (!collBudgetWeekMap[b.w]) collBudgetWeekMap[b.w] = 0;
-        collBudgetWeekMap[b.w] += (b.cb || 0);
+        collBudgetWeekMap[b.w] += b.cb;
       });
     }
     const allWeeks = Object.keys(weekMap).sort();
