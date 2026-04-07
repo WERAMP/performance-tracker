@@ -1935,7 +1935,7 @@ function LocationReport({ location, locations, metrics, dailyMetrics, opsData, b
                         </td>
                         <td style={{ padding: '10px', color: V.gray }}>{fmtVal(kpi.peerAvg, kpi.format)}</td>
                         <td style={{ padding: '10px', color: V.gray }}>
-                          {kpi.goal != null ? `${kpi.higherBetter ? '\u2265' : '\u2264'}${kpi.format === 'pct' ? `${kpi.goal}%` : kpi.goal}` : '--'}
+                          {kpi.goal != null ? `${kpi.higherBetter ? '\u2265' : '\u2264'}${kpi.format === 'pct' ? `${kpi.goal}%` : kpi.format === 'dollar' ? fmtVal(kpi.goal, 'dollar') : kpi.goal}` : '--'}
                         </td>
                         <td style={{ padding: '10px' }}>
                           <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
