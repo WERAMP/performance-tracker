@@ -885,7 +885,7 @@ function buildOpsChart(opsData, filteredNames, opsNameMap, valueKey) {
 //  Location Performance Report (collapsible, shown for single location)
 // ══════════════════════════════════════════════════════════════
 
-function LocationReport({ location, locations, metrics, dailyMetrics, opsData, btxData, syringeLocData, utilizationData, providerHoursData, injRevProviderData, btxProviderData, syringeProvData, revCollProvData, budgetData }) {
+function LocationReport({ location, locations, metrics, dailyMetrics, opsData, btxData, syringeLocData, utilizationData, providerHoursData, injRevProviderData, btxProviderData, syringeProvData, revCollProvData, budgetData, metricsProviderData, opsProviderData, utilHoursProviderData }) {
   const [expandedSections, setExpandedSections] = useState({ kpi: false, efficiency: false, providers: false, recommendations: false });
   const toggleSection = (key) => setExpandedSections(prev => ({ ...prev, [key]: !prev[key] }));
   const [reportPeriod, setReportPeriod] = useState('MTD');
@@ -893,6 +893,12 @@ function LocationReport({ location, locations, metrics, dailyMetrics, opsData, b
   const [selectedProviders, setSelectedProviders] = useState(null);
   const [providerDropdownOpen, setProviderDropdownOpen] = useState(false);
   const providerDropdownRef = useRef(null);
+  const [kpiProviders, setKpiProviders] = useState(null);
+  const [kpiDropdownOpen, setKpiDropdownOpen] = useState(false);
+  const kpiDropdownRef = useRef(null);
+  const [effProviders, setEffProviders] = useState(null);
+  const [effDropdownOpen, setEffDropdownOpen] = useState(false);
+  const effDropdownRef = useRef(null);
 
   const reportData = useMemo(() => {
     if (!location || !locations.length || !metrics.length) return null;
@@ -1182,6 +1188,61 @@ function LocationReport({ location, locations, metrics, dailyMetrics, opsData, b
     const peerCollPerHour = peerHours > 0 ? peerColl / peerHours : null;
     const peerAvgHoursPerWeek = avgMulti(providerHoursData || [], peers, 'h');
 
+    // ── Provider-filtered overrides for Section A (KPI) and Section B (Efficiency) ──
+    const computeProvFiltered = (provSet, mpData, rcpData, opsPData, uhData, btxPData, syrPData) => {
+      if (!provSet || provSet.size === 0) return null;
+      const mpRows = (mpData || []).filter(r => r.c === location && periodSet.has(r.w) && provSet.has(r.pr));
+      const rcpRows = (rcpData || []).filter(r => r.c === location && periodSet.has(r.w) && provSet.has(r.pr));
+      const opsRows = (opsPData || []).filter(r => r.c === location && periodSet.has(r.w) && provSet.has(r.pr));
+      const uhRows = (uhData || []).filter(r => r.c === location && periodSet.has(r.w) && provSet.has(r.pr));
+      const btxRows = (btxPData || []).filter(r => r.c === location && periodSet.has(r.w) && provSet.has(r.pr));
+      const syrRows = (syrPData || []).filter(r => r.c === location && periodSet.has(r.w) && provSet.has(r.pr));
+
+      const rev = mpRows.reduce((s, r) => s + (Number(r.s) || 0), 0);
+      const pt = mpRows.reduce((s, r) => s + (Number(r.p) || 0), 0);
+      const rt = mpRows.reduce((s, r) => s + (Number(r.rt) || 0), 0);
+      const inj = mpRows.reduce((s, r) => s + (Number(r.inj) || 0), 0);
+      const coll = rcpRows.reduce((s, r) => s + (Number(r.coll) || 0), 0);
+      const cn = opsRows.reduce((s, r) => s + (Number(r.cn) || 0), 0);
+      const ns = opsRows.reduce((s, r) => s + (Number(r.ns) || 0), 0);
+      const t = opsRows.reduce((s, r) => s + (Number(r.t) || 0), 0);
+      const totalH = uhRows.reduce((s, r) => s + (Number(r.h) || 0), 0);
+      const nonZeroUtil = uhRows.filter(r => Number(r.ur) > 0);
+      const utilAvg = nonZeroUtil.length > 0 ? nonZeroUtil.reduce((s, r) => s + (Number(r.ur) || 0), 0) / nonZeroUtil.length : null;
+      const btxTotalQty = btxRows.reduce((s, r) => s + (Number(r.b) || 0) * (Number(r.n) || 1), 0);
+      const btxTotalN = btxRows.reduce((s, r) => s + (Number(r.n) || 1), 0);
+      const avgBtxUnits = btxTotalN > 0 ? btxTotalQty / btxTotalN : null;
+      const syrFillerRows = syrRows.filter(r => r.sf != null);
+      const avgSyrFiller = syrFillerRows.length > 0 ? syrFillerRows.reduce((s, r) => s + (Number(r.sf) || 0), 0) / syrFillerRows.length : null;
+      const numWeeks = periodSet.size || 1;
+
+      return {
+        // KPI overrides
+        rev, pt, rt, inj, coll,
+        revPerPt: pt > 0 ? rev / pt : null,
+        retailPct: rev > 0 ? (rt / rev) * 100 : null,
+        injPct: rev > 0 ? (inj / rev) * 100 : null,
+        collPct: rev > 0 ? (coll / rev) * 100 : null,
+        cancelRate: t > 0 ? (cn / t) * 100 : null,
+        noshowRate: t > 0 ? (ns / t) * 100 : null,
+        util: utilAvg,
+        avgPt: pt / numWeeks,
+        avgBtxUnits,
+        avgSyrFiller,
+        // Efficiency overrides
+        revPerHour: totalH > 0 ? rev / totalH : null,
+        collPerHour: totalH > 0 ? coll / totalH : null,
+        avgHoursPerWeek: totalH / numWeeks,
+      };
+    };
+
+    const kpiFiltered = computeProvFiltered(
+      kpiProviders, metricsProviderData, revCollProvData, opsProviderData, utilHoursProviderData, btxProviderData, syringeProvData
+    );
+    const effFiltered = computeProvFiltered(
+      effProviders, metricsProviderData, revCollProvData, opsProviderData, utilHoursProviderData, btxProviderData, syringeProvData
+    );
+
     // ── Section 3: Provider Performance ──
     const { cards: providerCards, allProviderNames } = (() => {
       const provRows = (injRevProviderData || []).filter(r => r.c === location && periodSet.has(r.w));
@@ -1409,24 +1470,26 @@ function LocationReport({ location, locations, metrics, dailyMetrics, opsData, b
       locRev, locColl, locRevBudget, locCollBudget,
       locRevPerPt, locRetailPct, locUtil, locCancelRate, locNoshowRate,
       kpis: [
-        { name: 'Avg Revenue Per Patient', value: locRevPerPt, peerAvg: peerRevPerPt, goal: null, format: 'dollar', higherBetter: true, trend: revPerPtTrend },
-        { name: 'Retail % of Sales', value: locRetailPct, peerAvg: peerRetailPct, goal: 7.5, format: 'pct', higherBetter: true, trend: retailPctTrend },
-        { name: 'Injectables % of Sales', value: locInjPct, peerAvg: peerInjPct, goal: null, format: 'pct', higherBetter: true, trend: injPctTrend },
-        { name: 'Collections % of Revenue', value: locCollPct, peerAvg: peerCollPct, goal: null, format: 'pct', higherBetter: true, trend: collPctTrend },
-        { name: 'Avg Botox Units', value: locBtxUnits, peerAvg: peerBtxUnits, goal: 40, format: 'num', higherBetter: true, trend: btxTrend },
-        { name: 'Avg Syringes / Filler Appt', value: locSyringes, peerAvg: peerSyringes, goal: null, format: 'num1', higherBetter: true, trend: syringeTrend },
-        { name: 'Cancellation Rate', value: locCancelRate, peerAvg: peerCancelRate, goal: 5, format: 'pct', higherBetter: false, trend: cancelTrend },
-        { name: 'No-Show Rate', value: locNoshowRate, peerAvg: peerNoshowRate, goal: 5, format: 'pct', higherBetter: false, trend: noshowTrend },
-        { name: 'Utilization Rate', value: locUtil, peerAvg: peerUtil, goal: 70, format: 'pct', higherBetter: true, trend: utilTrend },
-        { name: 'Avg Weekly Patients', value: locPatients, peerAvg: peerPatients, goal: null, format: 'num', higherBetter: true, trend: patientTrend },
+        { name: 'Revenue', value: kpiFiltered ? kpiFiltered.rev : locRev, peerAvg: peerRev, goal: locRevBudget, format: 'dollar', higherBetter: true, trend: revTrend },
+        { name: 'Collections', value: kpiFiltered ? kpiFiltered.coll : locColl, peerAvg: peerColl, goal: locCollBudget, format: 'dollar', higherBetter: true, trend: null },
+        { name: 'Avg Revenue Per Patient', value: kpiFiltered ? kpiFiltered.revPerPt : locRevPerPt, peerAvg: peerRevPerPt, goal: null, format: 'dollar', higherBetter: true, trend: revPerPtTrend },
+        { name: 'Retail % of Sales', value: kpiFiltered ? kpiFiltered.retailPct : locRetailPct, peerAvg: peerRetailPct, goal: 7.5, format: 'pct', higherBetter: true, trend: retailPctTrend },
+        { name: 'Injectables % of Sales', value: kpiFiltered ? kpiFiltered.injPct : locInjPct, peerAvg: peerInjPct, goal: null, format: 'pct', higherBetter: true, trend: injPctTrend },
+        { name: 'Collections % of Revenue', value: kpiFiltered ? kpiFiltered.collPct : locCollPct, peerAvg: peerCollPct, goal: null, format: 'pct', higherBetter: true, trend: collPctTrend },
+        { name: 'Avg Botox Units', value: kpiFiltered ? kpiFiltered.avgBtxUnits : locBtxUnits, peerAvg: peerBtxUnits, goal: 40, format: 'num', higherBetter: true, trend: btxTrend },
+        { name: 'Avg Syringes / Filler Appt', value: kpiFiltered ? kpiFiltered.avgSyrFiller : locSyringes, peerAvg: peerSyringes, goal: null, format: 'num1', higherBetter: true, trend: syringeTrend },
+        { name: 'Cancellation Rate', value: kpiFiltered ? kpiFiltered.cancelRate : locCancelRate, peerAvg: peerCancelRate, goal: 5, format: 'pct', higherBetter: false, trend: cancelTrend },
+        { name: 'No-Show Rate', value: kpiFiltered ? kpiFiltered.noshowRate : locNoshowRate, peerAvg: peerNoshowRate, goal: 5, format: 'pct', higherBetter: false, trend: noshowTrend },
+        { name: 'Utilization Rate', value: kpiFiltered ? kpiFiltered.util : locUtil, peerAvg: peerUtil, goal: 70, format: 'pct', higherBetter: true, trend: utilTrend },
+        { name: 'Avg Weekly Patients', value: kpiFiltered ? kpiFiltered.avgPt : locPatients, peerAvg: peerPatients, goal: null, format: 'num', higherBetter: true, trend: patientTrend },
       ],
       revTrend, ptTrend, improved, declined,
       // Section 2 data
       efficiency: {
-        revPerHour: locRevPerHour, peerRevPerHour,
-        collPerHour: locCollPerHour, peerCollPerHour,
-        avgHoursPerWeek: locAvgHoursPerWeek, peerAvgHoursPerWeek,
-        utilRate: locUtil, peerUtilRate: peerUtil,
+        revPerHour: effFiltered ? effFiltered.revPerHour : locRevPerHour, peerRevPerHour,
+        collPerHour: effFiltered ? effFiltered.collPerHour : locCollPerHour, peerCollPerHour,
+        avgHoursPerWeek: effFiltered ? effFiltered.avgHoursPerWeek : locAvgHoursPerWeek, peerAvgHoursPerWeek,
+        utilRate: effFiltered ? effFiltered.util : locUtil, peerUtilRate: peerUtil,
       },
       // Section 3 data
       providerCards,
@@ -1434,21 +1497,25 @@ function LocationReport({ location, locations, metrics, dailyMetrics, opsData, b
       // Section 4 data
       quickWins, recommendations: topRecs,
     };
-  }, [location, locations, metrics, opsData, btxData, syringeLocData, utilizationData, providerHoursData, injRevProviderData, btxProviderData, syringeProvData, revCollProvData, budgetData, reportPeriod]);
+  }, [location, locations, metrics, dailyMetrics, opsData, btxData, syringeLocData, utilizationData, providerHoursData, injRevProviderData, btxProviderData, syringeProvData, revCollProvData, budgetData, metricsProviderData, opsProviderData, utilHoursProviderData, kpiProviders, effProviders, reportPeriod]);
 
   if (!reportData) return null;
 
-  // Reset provider selection to "all" whenever the set of available providers changes (period change)
+  // Reset all provider selections to "all" whenever the set of available providers changes (period change)
   const _providerNamesKey = (reportData.allProviderNames || []).slice().sort().join('|');
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  useEffect(() => { setSelectedProviders(null); }, [_providerNamesKey]);
+  useEffect(() => {
+    setSelectedProviders(null);
+    setKpiProviders(null);
+    setEffProviders(null);
+  }, [_providerNamesKey]);
 
-  // Close provider dropdown when clicking outside
+  // Close all provider dropdowns when clicking outside
   useEffect(() => {
     const handler = (e) => {
-      if (providerDropdownRef.current && !providerDropdownRef.current.contains(e.target)) {
-        setProviderDropdownOpen(false);
-      }
+      if (providerDropdownRef.current && !providerDropdownRef.current.contains(e.target)) setProviderDropdownOpen(false);
+      if (kpiDropdownRef.current && !kpiDropdownRef.current.contains(e.target)) setKpiDropdownOpen(false);
+      if (effDropdownRef.current && !effDropdownRef.current.contains(e.target)) setEffDropdownOpen(false);
     };
     document.addEventListener('mousedown', handler);
     return () => document.removeEventListener('mousedown', handler);
@@ -1519,6 +1586,58 @@ function LocationReport({ location, locations, metrics, dailyMetrics, opsData, b
       }}>{'\u25BC'}</span>
     </button>
   );
+
+  // Reusable provider multi-select dropdown for section headers
+  const ProviderDropdown = ({ open, setOpen, selected, setSelected, allNames, dropRef }) => {
+    const isAll = selected === null || selected.size === allNames.length;
+    const numSel = selected === null ? allNames.length : selected.size;
+    const label = isAll ? 'All Providers' : `${numSel} of ${allNames.length} Providers`;
+    const toggleOne = (name) => {
+      setSelected(prev => {
+        const base = prev === null ? new Set(allNames) : new Set(prev);
+        if (base.has(name)) base.delete(name); else base.add(name);
+        return new Set(base);
+      });
+    };
+    return (
+      <div ref={dropRef} style={{ position: 'relative', flexShrink: 0, marginLeft: 12 }} onClick={e => e.stopPropagation()}>
+        <button
+          onClick={() => setOpen(v => !v)}
+          style={{
+            display: 'flex', alignItems: 'center', gap: 6, padding: '5px 10px',
+            border: `1px solid ${V.taupe}`, borderRadius: 5, background: V.white,
+            cursor: 'pointer', fontSize: 11, fontFamily: FONT.body, color: V.navy,
+            whiteSpace: 'nowrap',
+          }}
+        >
+          {label}
+          <span style={{ fontSize: 9, color: V.gray, display: 'inline-block', transform: open ? 'rotate(180deg)' : 'rotate(0deg)', transition: 'transform 0.2s' }}>{'\u25BC'}</span>
+        </button>
+        {open && (
+          <div style={{
+            position: 'absolute', right: 0, top: 'calc(100% + 4px)', zIndex: 200,
+            background: V.white, border: `1px solid ${V.taupe}`, borderRadius: 6,
+            boxShadow: '0 4px 12px rgba(4,30,66,0.15)', minWidth: 210, maxHeight: 280, overflowY: 'auto',
+          }}>
+            <div style={{ padding: '7px 12px', borderBottom: `1px solid ${V.taupe}`, display: 'flex', gap: 10, alignItems: 'center' }}>
+              <button onClick={() => setSelected(null)} style={{ fontSize: 11, fontFamily: FONT.body, color: V.navy, background: 'none', border: 'none', cursor: 'pointer', padding: 0, fontWeight: 700 }}>Select All</button>
+              <span style={{ color: V.taupe }}>|</span>
+              <button onClick={() => setSelected(new Set())} style={{ fontSize: 11, fontFamily: FONT.body, color: V.gray, background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}>Deselect All</button>
+            </div>
+            {allNames.map(name => {
+              const checked = selected === null || selected.has(name);
+              return (
+                <label key={name} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '7px 12px', cursor: 'pointer', fontSize: 12, fontFamily: FONT.body, color: V.dark, borderBottom: `1px solid ${V.light}` }}>
+                  <input type="checkbox" checked={checked} onChange={() => toggleOne(name)} style={{ accentColor: V.navy, cursor: 'pointer', width: 14, height: 14 }} />
+                  {name}
+                </label>
+              );
+            })}
+          </div>
+        )}
+      </div>
+    );
+  };
 
   // Horizontal comparison bar
   const ComparisonBar = ({ locValue, peerValue, format, label, higherBetter }) => {
@@ -1687,7 +1806,30 @@ function LocationReport({ location, locations, metrics, dailyMetrics, opsData, b
 
         {/* ── Section A: KPI Scorecard ── */}
         <div style={{ marginBottom: 28 }}>
-          <SectionHeader label="A." sectionKey="kpi" title="KPI Scorecard" />
+          <div style={{
+            display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+            padding: '10px 0', borderBottom: `1px solid ${V.taupe}`,
+            marginBottom: expandedSections.kpi ? 14 : 0,
+          }}>
+            <button
+              onClick={() => toggleSection('kpi')}
+              style={{ display: 'flex', alignItems: 'center', gap: 8, flex: 1, background: 'none', border: 'none', cursor: 'pointer', textAlign: 'left', padding: 0 }}
+            >
+              <span style={{ fontSize: 10, fontWeight: 700, color: V.gold, letterSpacing: 1.5, textTransform: 'uppercase', fontFamily: FONT.body }}>A.</span>
+              <span style={{ fontSize: 13, fontFamily: FONT.body, fontWeight: 600, color: V.navy }}>KPI Scorecard</span>
+              {kpiProviders !== null && kpiProviders.size < (reportData.allProviderNames || []).length && (
+                <span style={{ fontSize: 9, fontFamily: FONT.body, color: V.gold, background: V.navy, padding: '2px 7px', borderRadius: 10, marginLeft: 4 }}>
+                  {kpiProviders.size} provider{kpiProviders.size !== 1 ? 's' : ''}
+                </span>
+              )}
+              <span style={{ color: V.gray, fontSize: 12, marginLeft: 4, transition: 'transform 0.2s', display: 'inline-block', transform: expandedSections.kpi ? 'rotate(180deg)' : 'rotate(0deg)' }}>{'\u25BC'}</span>
+            </button>
+            <ProviderDropdown
+              open={kpiDropdownOpen} setOpen={setKpiDropdownOpen}
+              selected={kpiProviders} setSelected={setKpiProviders}
+              allNames={reportData.allProviderNames || []} dropRef={kpiDropdownRef}
+            />
+          </div>
           {expandedSections.kpi && (
             <div style={{ overflowX: 'auto' }}>
               <table style={{
@@ -1743,7 +1885,30 @@ function LocationReport({ location, locations, metrics, dailyMetrics, opsData, b
 
         {/* ── Section B: Revenue & Efficiency Analysis ── */}
         <div style={{ marginBottom: 28 }}>
-          <SectionHeader label="B." sectionKey="efficiency" title="Revenue & Efficiency Analysis" />
+          <div style={{
+            display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+            padding: '10px 0', borderBottom: `1px solid ${V.taupe}`,
+            marginBottom: expandedSections.efficiency ? 14 : 0,
+          }}>
+            <button
+              onClick={() => toggleSection('efficiency')}
+              style={{ display: 'flex', alignItems: 'center', gap: 8, flex: 1, background: 'none', border: 'none', cursor: 'pointer', textAlign: 'left', padding: 0 }}
+            >
+              <span style={{ fontSize: 10, fontWeight: 700, color: V.gold, letterSpacing: 1.5, textTransform: 'uppercase', fontFamily: FONT.body }}>B.</span>
+              <span style={{ fontSize: 13, fontFamily: FONT.body, fontWeight: 600, color: V.navy }}>Revenue &amp; Efficiency Analysis</span>
+              {effProviders !== null && effProviders.size < (reportData.allProviderNames || []).length && (
+                <span style={{ fontSize: 9, fontFamily: FONT.body, color: V.gold, background: V.navy, padding: '2px 7px', borderRadius: 10, marginLeft: 4 }}>
+                  {effProviders.size} provider{effProviders.size !== 1 ? 's' : ''}
+                </span>
+              )}
+              <span style={{ color: V.gray, fontSize: 12, marginLeft: 4, transition: 'transform 0.2s', display: 'inline-block', transform: expandedSections.efficiency ? 'rotate(180deg)' : 'rotate(0deg)' }}>{'\u25BC'}</span>
+            </button>
+            <ProviderDropdown
+              open={effDropdownOpen} setOpen={setEffDropdownOpen}
+              selected={effProviders} setSelected={setEffProviders}
+              allNames={reportData.allProviderNames || []} dropRef={effDropdownRef}
+            />
+          </div>
           {expandedSections.efficiency && (
             <div style={{
               background: V.cream, borderRadius: 8, border: `1px solid ${V.taupe}`,
@@ -2139,6 +2304,10 @@ export default function PerformanceTracker({ initialLocTypes, initialPractices, 
   const [revCollProvAppendixProviders, setRevCollProvAppendixProviders] = useState(null);
   const [revCollProvAppendixLocs, setRevCollProvAppendixLocs] = useState([]);
   const [revCollHoursProviders, setRevCollHoursProviders] = useState(null); // null = show total (no provider filter)
+  const [revWeekLocs, setRevWeekLocs] = useState(defaultChartLoc);
+  const [revWeekProviders, setRevWeekProviders] = useState(null);
+  const [revPerHour2Locs, setRevPerHour2Locs] = useState(defaultChartLoc);
+  const [revPerHour2Providers, setRevPerHour2Providers] = useState(null);
   const [revPerHourProviders, setRevPerHourProviders] = useState(null);
   const [uniquePtProviders, setUniquePtProviders] = useState(null);
   const [avgRevProviders, setAvgRevProviders] = useState(null);
@@ -2252,6 +2421,7 @@ export default function PerformanceTracker({ initialLocTypes, initialPractices, 
     setNtxFillerLocs, setSyrInjLocs, setSyrFillerLocs,
     setUtilizationLocs, setNetHoursLocs,
     setRevCollAppendixLocs, setRevCollHoursLocs,
+    setRevWeekLocs, setRevPerHour2Locs,
   ];
 
   // Clear chart-level location picks when top filters change (skip before data loads with initial filters)
@@ -2270,6 +2440,8 @@ export default function PerformanceTracker({ initialLocTypes, initialPractices, 
       setRevCollProvAppendixProviders(null);
       setRevCollHoursProviders(null);
       setRevPerHourProviders(null);
+      setRevWeekProviders(null);
+      setRevPerHour2Providers(null);
       setUniquePtProviders(null);
       setAvgRevProviders(null);
       setRetailProviders(null);
@@ -2285,6 +2457,8 @@ export default function PerformanceTracker({ initialLocTypes, initialPractices, 
       setRevCollProvAppendixProviders([]);
       setRevCollHoursProviders(null);
       setRevPerHourProviders(null);
+      setRevWeekProviders(null);
+      setRevPerHour2Providers(null);
       setUniquePtProviders(null);
       setAvgRevProviders(null);
       setRetailProviders(null);
@@ -2379,6 +2553,83 @@ export default function PerformanceTracker({ initialLocTypes, initialPractices, 
   // ══════════════════════════════════════════════════════════
   //  Chart data transformations
   // ══════════════════════════════════════════════════════════
+
+  // ── Weekly Revenue (Total + per-location, or per-provider breakdown) ──
+  const { revWeekData, revWeekSeries, revWeekIsProviderMode } = useMemo(() => {
+    const centerNames = new Set(locationNames);
+    const useProvFilter = isSingleLocation && revWeekProviders && revWeekProviders.length > 0 && revWeekProviders.length < availableInjProviders.length;
+
+    if (useProvFilter) {
+      const provSet = new Set(revWeekProviders);
+      const filtered = metricsProviderData.filter(m => centerNames.has(m.c) && provSet.has(m.pr));
+      const allWeeks = [...new Set(filtered.map(m => m.w))].sort();
+      const { mode: tMode, count: tCount } = getEffectiveTime('revWeek');
+      const timeRange = getTimeRange(allWeeks, tMode, tCount);
+      const selectedProvs = [...provSet].sort();
+      if (!timeRange.isMonthly) {
+        const data = timeRange.periods.map(w => {
+          const row = { week: formatWeek(w) };
+          const weekRows = filtered.filter(m => m.w === w);
+          selectedProvs.forEach(pr => {
+            const s = weekRows.filter(m => m.pr === pr).reduce((acc, m) => acc + (m.s || 0), 0);
+            row[pr] = s || null;
+          });
+          return row;
+        });
+        return { revWeekData: data, revWeekSeries: selectedProvs, revWeekIsProviderMode: true };
+      } else {
+        const today = new Date();
+        const curMonth = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}`;
+        const data = timeRange.periods.map(mk => {
+          const row = { week: formatMonth(mk, mk === curMonth) };
+          const monthRows = filtered.filter(m => m.w.startsWith(mk));
+          selectedProvs.forEach(pr => {
+            const s = monthRows.filter(m => m.pr === pr).reduce((acc, m) => acc + (m.s || 0), 0);
+            row[pr] = s || null;
+          });
+          return row;
+        });
+        return { revWeekData: data, revWeekSeries: selectedProvs, revWeekIsProviderMode: true };
+      }
+    }
+
+    // Location-level mode
+    const filtered = metrics.filter(m => centerNames.has(m.c));
+    const allWeeks = [...new Set(filtered.map(m => m.w))].sort();
+    const { mode: tMode, count: tCount } = getEffectiveTime('revWeek');
+    const timeRange = getTimeRange(allWeeks, tMode, tCount);
+
+    if (!timeRange.isMonthly) {
+      const weeks = timeRange.periods;
+      const data = weeks.map(w => {
+        const weekRows = filtered.filter(m => m.w === w);
+        const total = weekRows.reduce((s, m) => s + (m.s || 0), 0);
+        const row = { week: formatWeek(w), Total: total };
+        revWeekLocs.filter(n => n !== 'Total').forEach(loc => {
+          const m = weekRows.find(r => r.c === loc);
+          row[loc] = m ? (m.s || 0) : null;
+        });
+        return row;
+      });
+      const locs = revWeekLocs.filter(n => n !== 'Total');
+      return { revWeekData: data, revWeekSeries: [...(revWeekLocs.includes('Total') ? ['Total'] : []), ...locs], revWeekIsProviderMode: false };
+    } else {
+      const today = new Date();
+      const curMonth = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}`;
+      const data = timeRange.periods.map(mk => {
+        const monthRows = filtered.filter(m => m.w.startsWith(mk));
+        const total = monthRows.reduce((s, m) => s + (m.s || 0), 0);
+        const row = { week: formatMonth(mk, mk === curMonth), Total: total };
+        revWeekLocs.filter(n => n !== 'Total').forEach(loc => {
+          const s = monthRows.filter(r => r.c === loc).reduce((acc, m) => acc + (m.s || 0), 0);
+          row[loc] = s || null;
+        });
+        return row;
+      });
+      const locs = revWeekLocs.filter(n => n !== 'Total');
+      return { revWeekData: data, revWeekSeries: [...(revWeekLocs.includes('Total') ? ['Total'] : []), ...locs], revWeekIsProviderMode: false };
+    }
+  }, [metrics, metricsProviderData, locationNames, revWeekLocs, revWeekProviders, isSingleLocation, availableInjProviders, globalTimeMode, globalPeriodCount, chartTimeOverrides]);
 
   // ── Avg Revenue Per Patient (weighted average Total + per-location, or per-provider) ──
   const { avgRevData, avgRevSeries, avgRevIsProviderMode } = useMemo(() => {
@@ -3932,6 +4183,82 @@ export default function PerformanceTracker({ initialLocTypes, initialPractices, 
     return { revCollHoursData: data, revCollHoursSeries: series, revCollHoursRightAxis: rightAxis };
   }, [metrics, providerHoursData, locationNames, revCollHoursLocs, revCollHoursProviders, revCollProvData, globalTimeMode, globalPeriodCount, chartTimeOverrides]);
 
+  // ── Revenue Per Net Provider Hour — Section 2 chart (per-location or per-provider) ──
+  const { revPerHour2Data, revPerHour2Series } = useMemo(() => {
+    const centerNames = new Set(locationNames);
+    const useProvFilter = isSingleLocation && revPerHour2Providers && revPerHour2Providers.length > 0 && revPerHour2Providers.length < availableInjProviders.length;
+
+    if (useProvFilter) {
+      const provSet = new Set(revPerHour2Providers);
+      const filteredMP = metricsProviderData.filter(m => centerNames.has(m.c) && provSet.has(m.pr));
+      const filteredUH = utilHoursProviderData.filter(m => centerNames.has(m.c) && provSet.has(m.pr));
+      const allWeeks = [...new Set(filteredMP.map(m => m.w))].sort();
+      const { mode: tMode, count: tCount } = getEffectiveTime('revPerHour2');
+      const timeRange = getTimeRange(allWeeks, tMode, tCount);
+      const selectedProvs = [...provSet].sort();
+      const buildRow = (wKeys, label) => {
+        const row = { week: label };
+        selectedProvs.forEach(pr => {
+          const rev = filteredMP.filter(m => wKeys.includes(m.w) && m.pr === pr).reduce((s, m) => s + (m.s || 0), 0);
+          const hrs = filteredUH.filter(m => wKeys.includes(m.w) && m.pr === pr).reduce((s, m) => s + (m.h || 0), 0);
+          row[pr] = hrs > 0 ? Math.round(rev / hrs) : null;
+        });
+        return row;
+      };
+      let data;
+      if (!timeRange.isMonthly) {
+        data = timeRange.periods.map(w => buildRow([w], formatWeek(w)));
+      } else {
+        const today = new Date();
+        const curMonth = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}`;
+        data = timeRange.periods.map(mk => buildRow(allWeeks.filter(w => w.startsWith(mk)), formatMonth(mk, mk === curMonth)));
+      }
+      return { revPerHour2Data: data, revPerHour2Series: selectedProvs };
+    }
+
+    // Location-level mode
+    const filtered = metrics.filter(m => centerNames.has(m.c));
+    const filteredHours = providerHoursData.filter(m => centerNames.has(m.c));
+    const allWeeks = [...new Set(filtered.map(m => m.w))].sort();
+    const { mode: tMode, count: tCount } = getEffectiveTime('revPerHour2');
+    const timeRange = getTimeRange(allWeeks, tMode, tCount);
+
+    const locHoursMap = {};
+    filteredHours.forEach(m => {
+      if (!locHoursMap[m.w]) locHoursMap[m.w] = {};
+      locHoursMap[m.w][m.c] = (locHoursMap[m.w][m.c] || 0) + (m.h || 0);
+    });
+
+    const buildLocRow = (wKeys, label) => {
+      const rows = filtered.filter(m => wKeys.includes(m.w));
+      const row = { week: label };
+      if (revPerHour2Locs.includes('Total')) {
+        const totalRev = rows.reduce((s, m) => s + (m.s || 0), 0);
+        const totalHrs = wKeys.reduce((s, w) => s + Object.values(locHoursMap[w] || {}).reduce((ss, h) => ss + h, 0), 0);
+        row['Rev / Hour'] = totalHrs > 0 ? Math.round(totalRev / totalHrs) : null;
+      }
+      revPerHour2Locs.filter(n => n !== 'Total').forEach(loc => {
+        const locRev = rows.filter(m => m.c === loc).reduce((s, m) => s + (m.s || 0), 0);
+        const locHrs = wKeys.reduce((s, w) => s + ((locHoursMap[w] || {})[loc] || 0), 0);
+        row[loc + ' Rev/Hr'] = locHrs > 0 ? Math.round(locRev / locHrs) : null;
+      });
+      return row;
+    };
+
+    let data;
+    if (!timeRange.isMonthly) {
+      data = timeRange.periods.map(w => buildLocRow([w], formatWeek(w)));
+    } else {
+      const today = new Date();
+      const curMonth = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}`;
+      data = timeRange.periods.map(mk => buildLocRow(allWeeks.filter(w => w.startsWith(mk)), formatMonth(mk, mk === curMonth)));
+    }
+    const series = [];
+    if (revPerHour2Locs.includes('Total')) series.push('Rev / Hour');
+    revPerHour2Locs.filter(n => n !== 'Total').forEach(loc => series.push(loc + ' Rev/Hr'));
+    return { revPerHour2Data: data, revPerHour2Series: series };
+  }, [metrics, metricsProviderData, providerHoursData, utilHoursProviderData, locationNames, revPerHour2Locs, revPerHour2Providers, isSingleLocation, availableInjProviders, globalTimeMode, globalPeriodCount, chartTimeOverrides]);
+
   // ── Revenue/Hour, Collections/Hour, Utilization Rate (with optional provider filter) ──
   const { revPerHourChartData, revPerHourSeries, revPerHourRightAxis } = useMemo(() => {
     const centerNames = new Set(locationNames);
@@ -4173,6 +4500,9 @@ export default function PerformanceTracker({ initialLocTypes, initialPractices, 
             syringeProvData={syringeProvData}
             revCollProvData={revCollProvData}
             budgetData={budgetData}
+            metricsProviderData={metricsProviderData}
+            opsProviderData={opsProviderData}
+            utilHoursProviderData={utilHoursProviderData}
           />
         )}
 
@@ -4402,6 +4732,74 @@ export default function PerformanceTracker({ initialLocTypes, initialPractices, 
           <SectionSeparator number="2" title={`Core KPIs ${sectionsMinimized.section2 ? '▸' : ''}`} />
         </div>
         <div style={{ display: sectionsMinimized.section2 ? 'none' : 'block' }}>
+
+        {/* Revenue + Revenue Per Net Provider Hour — new top charts */}
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 24, marginBottom: 24 }}>
+          <ChartCard
+            title="Revenue"
+            tooltip="Total revenue per week by location or provider"
+            headerRight={
+              <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                <ChartTimeControl chartId="revWeek" globalMode={globalTimeMode} globalCount={globalPeriodCount} overrides={chartTimeOverrides} setOverrides={setChartTimeOverrides} />
+                {!isSingleLocation && (<MultiSelectDropdown
+                  label="Location"
+                  options={['Total', ...locationNames]}
+                  selected={revWeekLocs}
+                  onChange={setRevWeekLocs}
+                  minWidth={85}
+                />)}
+                {isSingleLocation && availableInjProviders.length > 0 && (<MultiSelectDropdown
+                  label="Provider"
+                  options={availableInjProviders}
+                  selected={revWeekProviders || availableInjProviders}
+                  onChange={setRevWeekProviders}
+                  minWidth={85}
+                />)}
+              </div>
+            }
+          >
+            <MultiLineChart
+              data={revWeekData}
+              series={revWeekSeries}
+              height={300}
+              formatter={fmtK}
+              colorMap={revWeekIsProviderMode ? providerColorMap : { Total: V.gold, ...locationColorMap }}
+              rightAxisSeries={revWeekIsProviderMode ? [] : revWeekLocs.filter(n => n !== 'Total')}
+            />
+          </ChartCard>
+          <ChartCard
+            title="Revenue Per Net Provider Hour"
+            tooltip="Revenue divided by net provider hours worked per week"
+            headerRight={
+              <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                <ChartTimeControl chartId="revPerHour2" globalMode={globalTimeMode} globalCount={globalPeriodCount} overrides={chartTimeOverrides} setOverrides={setChartTimeOverrides} />
+                {!isSingleLocation && (<MultiSelectDropdown
+                  label="Location"
+                  options={['Total', ...locationNames]}
+                  selected={revPerHour2Locs}
+                  onChange={setRevPerHour2Locs}
+                  minWidth={85}
+                />)}
+                {isSingleLocation && availableInjProviders.length > 0 && (<MultiSelectDropdown
+                  label="Provider"
+                  options={availableInjProviders}
+                  selected={revPerHour2Providers || availableInjProviders}
+                  onChange={setRevPerHour2Providers}
+                  minWidth={85}
+                />)}
+              </div>
+            }
+          >
+            <MultiLineChart
+              data={revPerHour2Data}
+              series={revPerHour2Series}
+              height={300}
+              formatter={fmtDollar}
+              colorMap={revWeekIsProviderMode ? providerColorMap : { Total: V.gold, ...locationColorMap }}
+              rightAxisSeries={[]}
+            />
+          </ChartCard>
+        </div>
 
         {/* Unique Patients + Avg Rev Per Patient */}
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 24, marginBottom: 24 }}>
