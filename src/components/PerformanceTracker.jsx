@@ -889,6 +889,10 @@ function LocationReport({ location, locations, metrics, dailyMetrics, opsData, b
   const [expandedSections, setExpandedSections] = useState({ kpi: false, efficiency: false, providers: false, recommendations: false });
   const toggleSection = (key) => setExpandedSections(prev => ({ ...prev, [key]: !prev[key] }));
   const [reportPeriod, setReportPeriod] = useState('MTD');
+  // Provider filter — null means all selected; a Set means only those names are shown
+  const [selectedProviders, setSelectedProviders] = useState(null);
+  const [providerDropdownOpen, setProviderDropdownOpen] = useState(false);
+  const providerDropdownRef = useRef(null);
 
   const reportData = useMemo(() => {
     if (!location || !locations.length || !metrics.length) return null;
@@ -1179,10 +1183,17 @@ function LocationReport({ location, locations, metrics, dailyMetrics, opsData, b
     const peerAvgHoursPerWeek = avgMulti(providerHoursData || [], peers, 'h');
 
     // ── Section 3: Provider Performance ──
-    const providerCards = (() => {
-      if (!injRevProviderData || !injRevProviderData.length) return [];
-      const provRows = injRevProviderData.filter(r => r.c === location && periodSet.has(r.w));
-      const providerNames = [...new Set(provRows.map(r => r.pr))].filter(Boolean);
+    const { cards: providerCards, allProviderNames } = (() => {
+      const provRows = (injRevProviderData || []).filter(r => r.c === location && periodSet.has(r.w));
+      // Union of all provider data sources so providers with only BTX / syringe / collections data are included
+      const allProviderNamesSet = new Set([
+        ...provRows.map(r => r.pr),
+        ...(btxProviderData || []).filter(r => r.c === location && periodSet.has(r.w)).map(r => r.pr),
+        ...(syringeProvData || []).filter(r => r.c === location && periodSet.has(r.w)).map(r => r.pr),
+        ...(revCollProvData || []).filter(r => r.c === location && periodSet.has(r.w)).map(r => r.pr),
+      ].filter(Boolean));
+      const providerNames = [...allProviderNamesSet];
+      if (!providerNames.length) return { cards: [], allProviderNames: [] };
 
       // Peer averages for provider-level metrics
       const peerInjRevRows = injRevProviderData.filter(r => peers.includes(r.c) && periodSet.has(r.w));
@@ -1232,7 +1243,7 @@ function LocationReport({ location, locations, metrics, dailyMetrics, opsData, b
         })()
         : null;
 
-      return providerNames.map(pr => {
+      const cards = providerNames.map(pr => {
         // Injectable revenue (sum over 4 weeks)
         const prInjRows = provRows.filter(r => r.pr === pr);
         const injRev = prInjRows.reduce((s, r) => s + (Number(r.r) || 0), 0);
@@ -1278,6 +1289,7 @@ function LocationReport({ location, locations, metrics, dailyMetrics, opsData, b
           recommendation: weakest ? recMap[weakest] : null,
         };
       }).sort((a, b) => b.injRev - a.injRev);
+      return { cards, allProviderNames: providerNames };
     })();
 
     // Identify improved / declined metrics
@@ -1418,12 +1430,29 @@ function LocationReport({ location, locations, metrics, dailyMetrics, opsData, b
       },
       // Section 3 data
       providerCards,
+      allProviderNames,
       // Section 4 data
       quickWins, recommendations: topRecs,
     };
   }, [location, locations, metrics, opsData, btxData, syringeLocData, utilizationData, providerHoursData, injRevProviderData, btxProviderData, syringeProvData, revCollProvData, budgetData, reportPeriod]);
 
   if (!reportData) return null;
+
+  // Reset provider selection to "all" whenever the set of available providers changes (period change)
+  const _providerNamesKey = (reportData.allProviderNames || []).slice().sort().join('|');
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  useEffect(() => { setSelectedProviders(null); }, [_providerNamesKey]);
+
+  // Close provider dropdown when clicking outside
+  useEffect(() => {
+    const handler = (e) => {
+      if (providerDropdownRef.current && !providerDropdownRef.current.contains(e.target)) {
+        setProviderDropdownOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, []);
 
   const fmtVal = (v, format) => {
     if (v == null) return '--';
@@ -1770,12 +1799,97 @@ function LocationReport({ location, locations, metrics, dailyMetrics, opsData, b
         {/* ── Section C: Provider Performance Cards ── */}
         {reportData.providerCards.length > 0 && (
           <div style={{ marginBottom: 28 }}>
-            <SectionHeader label="C." sectionKey="providers" title="Provider Performance" />
+            {/* Custom header row: collapse toggle on left + provider filter dropdown on right */}
+            <div style={{
+              display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+              padding: '10px 0', borderBottom: `1px solid ${V.taupe}`,
+              marginBottom: expandedSections.providers ? 14 : 0,
+            }}>
+              <button
+                onClick={() => toggleSection('providers')}
+                style={{ display: 'flex', alignItems: 'center', gap: 8, flex: 1, background: 'none', border: 'none', cursor: 'pointer', textAlign: 'left', padding: 0 }}
+              >
+                <span style={{ fontSize: 10, fontWeight: 700, color: V.gold, letterSpacing: 1.5, textTransform: 'uppercase', fontFamily: FONT.body }}>C.</span>
+                <span style={{ fontSize: 13, fontFamily: FONT.body, fontWeight: 600, color: V.navy }}>Provider Performance</span>
+                <span style={{ color: V.gray, fontSize: 12, marginLeft: 4, transition: 'transform 0.2s', display: 'inline-block', transform: expandedSections.providers ? 'rotate(180deg)' : 'rotate(0deg)' }}>{'\u25BC'}</span>
+              </button>
+              {/* Provider filter dropdown */}
+              {(() => {
+                const allNames = reportData.allProviderNames || [];
+                const isAllSelected = selectedProviders === null || selectedProviders.size === allNames.length;
+                const numSelected = selectedProviders === null ? allNames.length : selectedProviders.size;
+                const buttonLabel = isAllSelected ? 'All Providers' : `${numSelected} of ${allNames.length} Providers`;
+                const toggleProvider = (name) => {
+                  setSelectedProviders(prev => {
+                    const base = prev === null ? new Set(allNames) : new Set(prev);
+                    if (base.has(name)) base.delete(name); else base.add(name);
+                    return new Set(base);
+                  });
+                };
+                return (
+                  <div ref={providerDropdownRef} style={{ position: 'relative', flexShrink: 0, marginLeft: 12 }} onClick={(e) => e.stopPropagation()}>
+                    <button
+                      onClick={() => setProviderDropdownOpen(v => !v)}
+                      style={{
+                        display: 'flex', alignItems: 'center', gap: 6, padding: '5px 10px',
+                        border: `1px solid ${V.taupe}`, borderRadius: 5, background: V.white,
+                        cursor: 'pointer', fontSize: 11, fontFamily: FONT.body, color: V.navy,
+                        whiteSpace: 'nowrap',
+                      }}
+                    >
+                      {buttonLabel}
+                      <span style={{ fontSize: 9, color: V.gray, display: 'inline-block', transform: providerDropdownOpen ? 'rotate(180deg)' : 'rotate(0deg)', transition: 'transform 0.2s' }}>{'\u25BC'}</span>
+                    </button>
+                    {providerDropdownOpen && (
+                      <div style={{
+                        position: 'absolute', right: 0, top: 'calc(100% + 4px)', zIndex: 200,
+                        background: V.white, border: `1px solid ${V.taupe}`, borderRadius: 6,
+                        boxShadow: '0 4px 12px rgba(4,30,66,0.15)', minWidth: 210, maxHeight: 280,
+                        overflowY: 'auto',
+                      }}>
+                        {/* Select All / Deselect All */}
+                        <div style={{ padding: '7px 12px', borderBottom: `1px solid ${V.taupe}`, display: 'flex', gap: 10, alignItems: 'center' }}>
+                          <button
+                            onClick={() => setSelectedProviders(null)}
+                            style={{ fontSize: 11, fontFamily: FONT.body, color: V.navy, background: 'none', border: 'none', cursor: 'pointer', padding: 0, fontWeight: 700 }}
+                          >Select All</button>
+                          <span style={{ color: V.taupe }}>|</span>
+                          <button
+                            onClick={() => setSelectedProviders(new Set())}
+                            style={{ fontSize: 11, fontFamily: FONT.body, color: V.gray, background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}
+                          >Deselect All</button>
+                        </div>
+                        {allNames.map(name => {
+                          const checked = selectedProviders === null || selectedProviders.has(name);
+                          return (
+                            <label key={name} style={{
+                              display: 'flex', alignItems: 'center', gap: 8, padding: '7px 12px',
+                              cursor: 'pointer', fontSize: 12, fontFamily: FONT.body, color: V.dark,
+                              borderBottom: `1px solid ${V.light}`,
+                            }}>
+                              <input
+                                type="checkbox"
+                                checked={checked}
+                                onChange={() => toggleProvider(name)}
+                                style={{ accentColor: V.navy, cursor: 'pointer', width: 14, height: 14 }}
+                              />
+                              {name}
+                            </label>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
+                );
+              })()}
+            </div>
             {expandedSections.providers && (
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 14 }}>
-                {reportData.providerCards.map(prov => {
+                {reportData.providerCards
+                  .filter(prov => selectedProviders === null || selectedProviders.has(prov.name))
+                  .map(prov => {
                   const metricRows = [
-                    { label: '4-Week Inj Revenue', value: prov.injRev, peerAvg: prov.peerAvgInjRev, format: 'dollar', higherBetter: true },
+                    { label: 'Inj Revenue', value: prov.injRev, peerAvg: prov.peerAvgInjRev, format: 'dollar', higherBetter: true },
                     { label: 'Avg Botox Units', value: prov.avgBtx, peerAvg: prov.peerAvgBtx, format: 'num1', higherBetter: true },
                     { label: 'Avg Syr/Inj Appt', value: prov.avgSyrInj, peerAvg: prov.peerAvgSyrInj, format: 'num1', higherBetter: true },
                     { label: 'Avg Syr/Filler Appt', value: prov.avgSyrFiller, peerAvg: prov.peerAvgSyrFiller, format: 'num1', higherBetter: true },
