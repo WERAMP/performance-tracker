@@ -885,7 +885,7 @@ function buildOpsChart(opsData, filteredNames, opsNameMap, valueKey) {
 //  Location Performance Report (collapsible, shown for single location)
 // ══════════════════════════════════════════════════════════════
 
-function LocationReport({ location, locations, metrics, opsData, btxData, syringeLocData, utilizationData, providerHoursData, injRevProviderData, btxProviderData, syringeProvData, revCollProvData, budgetData }) {
+function LocationReport({ location, locations, metrics, dailyMetrics, opsData, btxData, syringeLocData, utilizationData, providerHoursData, injRevProviderData, btxProviderData, syringeProvData, revCollProvData, budgetData }) {
   const [expandedSections, setExpandedSections] = useState({ kpi: false, efficiency: false, providers: false, recommendations: false });
   const toggleSection = (key) => setExpandedSections(prev => ({ ...prev, [key]: !prev[key] }));
   const [reportPeriod, setReportPeriod] = useState('MTD');
@@ -948,6 +948,26 @@ function LocationReport({ location, locations, metrics, opsData, btxData, syring
     }
     const periodSet = new Set(periodWeeks);
 
+    // ── Exact daily date range for KPI actuals (no week-boundary bleed) ──────
+    // kpiFrom/kpiTo are ISO date strings used to filter daily-metrics.json
+    let kpiFrom, kpiTo = todayStr;
+    if (reportPeriod === 'MTD') {
+      kpiFrom = `${currentYear}-${String(currentMonth + 1).padStart(2, '0')}-01`;
+    } else if (reportPeriod === 'QTD') {
+      const qStart = Math.floor(currentMonth / 3) * 3;
+      kpiFrom = `${currentYear}-${String(qStart + 1).padStart(2, '0')}-01`;
+    } else if (reportPeriod === 'YTD') {
+      kpiFrom = `${currentYear}-01-01`;
+    } else if (reportPeriod === 'L30') {
+      const f = new Date(todayD); f.setDate(f.getDate() - 29);
+      kpiFrom = f.toISOString().slice(0, 10);
+    } else if (reportPeriod === 'L60') {
+      const f = new Date(todayD); f.setDate(f.getDate() - 59);
+      kpiFrom = f.toISOString().slice(0, 10);
+    } else {
+      kpiFrom = periodWeeks.length ? periodWeeks[0] : todayStr;
+    }
+
     // Helpers using ACTUAL JSON field names
     const avg = (data, locName, field) => {
       if (!data || !data.length) return null;
@@ -959,31 +979,45 @@ function LocationReport({ location, locations, metrics, opsData, btxData, syring
       if (!data || !data.length) return 0;
       return data.filter(r => r.c === locName && periodSet.has(r.w)).reduce((s, r) => s + (Number(r[field]) || 0), 0);
     };
+    // Daily sum: exact date range, no week-boundary bleed
+    const sumDaily = (locName, field) => {
+      if (!dailyMetrics || !dailyMetrics.length) return 0;
+      return dailyMetrics
+        .filter(r => r.c === locName && r.d >= kpiFrom && r.d <= kpiTo)
+        .reduce((s, r) => s + (Number(r[field]) || 0), 0);
+    };
     const avgMulti = (data, locNames, field) => {
       if (!data || !data.length) return null;
       const vals = locNames.map(n => avg(data, n, field)).filter(v => v != null);
       return vals.length ? vals.reduce((s, v) => s + v, 0) / vals.length : null;
     };
 
-    // KPI calculations
-    const locRev = sum4(metrics, location, 's');
-    const locPt = sum4(metrics, location, 'p');
+    // KPI calculations — financial metrics use daily data for exact period sums
+    const locRev = sumDaily(location, 's');
+    const locPt = sumDaily(location, 'p');
     const locRevPerPt = locPt > 0 ? locRev / locPt : null;
-    const peerRev = peers.reduce((s, p) => s + sum4(metrics, p, 's'), 0);
-    const peerPt = peers.reduce((s, p) => s + sum4(metrics, p, 'p'), 0);
+    const peerRev = peers.reduce((s, p) => s + sumDaily(p, 's'), 0);
+    const peerPt = peers.reduce((s, p) => s + sumDaily(p, 'p'), 0);
     const peerRevPerPt = peerPt > 0 ? peerRev / peerPt : null;
 
-    const locRetailPct = locRev > 0 ? sum4(metrics, location, 'rt') / locRev * 100 : null;
-    const peerRetailPct = peerRev > 0 ? peers.reduce((s, p) => s + sum4(metrics, p, 'rt'), 0) / peerRev * 100 : null;
+    const locRetail = sumDaily(location, 'rt');
+    const locRetailPct = locRev > 0 ? locRetail / locRev * 100 : null;
+    const peerRetail = peers.reduce((s, p) => s + sumDaily(p, 'rt'), 0);
+    const peerRetailPct = peerRev > 0 ? peerRetail / peerRev * 100 : null;
 
-    const locInjPct = locRev > 0 ? sum4(metrics, location, 'inj') / locRev * 100 : null;
-    const peerInjPct = peerRev > 0 ? peers.reduce((s, p) => s + sum4(metrics, p, 'inj'), 0) / peerRev * 100 : null;
+    const locInj = sumDaily(location, 'inj');
+    const locInjPct = locRev > 0 ? locInj / locRev * 100 : null;
+    const peerInj = peers.reduce((s, p) => s + sumDaily(p, 'inj'), 0);
+    const peerInjPct = peerRev > 0 ? peerInj / peerRev * 100 : null;
 
-    const locColl = sum4(metrics, location, 'co');
+    const locColl = sumDaily(location, 'co');
     const locCollPct = locRev > 0 ? locColl / locRev * 100 : null;
     const locRevBudget = sum4(budgetData || [], location, 'b');
-    const locCollBudget = sum4(budgetData || [], location, 'cb');
-    const peerColl = peers.reduce((s, p) => s + sum4(metrics, p, 'co'), 0);
+    const locCollBudget = (() => {
+      const rows = (budgetData || []).filter(r => r.c === location && periodSet.has(r.w) && r.cb != null);
+      return rows.reduce((s, r) => s + (Number(r.cb) || 0), 0);
+    })();
+    const peerColl = peers.reduce((s, p) => s + sumDaily(p, 'co'), 0);
     const peerCollPct = peerRev > 0 ? peerColl / peerRev * 100 : null;
 
     const locBtxUnits = avg(btxData, location, 'b');
@@ -1876,6 +1910,7 @@ function LocationReport({ location, locations, metrics, opsData, btxData, syring
 export default function PerformanceTracker({ initialLocTypes, initialPractices, initialLocations }) {
   const [locations, setLocations] = useState([]);
   const [metrics, setMetrics] = useState([]);
+  const [dailyMetrics, setDailyMetrics] = useState([]);
   const [opsData, setOpsData] = useState([]);
   const [btxData, setBtxData] = useState([]);
   const [budgetData, setBudgetData] = useState([]);
@@ -1967,6 +2002,7 @@ export default function PerformanceTracker({ initialLocTypes, initialPractices, 
     Promise.all([
       fetch('/data/performance/locations.json').then(r => r.json()),
       fetch('/data/performance/weekly-metrics.json').then(r => r.json()),
+      fetch('/data/performance/daily-metrics.json').then(r => r.json()).catch(() => []),
       fetch('/data/performance/weekly-ops.json').then(r => r.json()),
       fetch('/data/performance/weekly-btx.json').then(r => r.json()).catch(() => []),
       fetch('/data/performance/weekly-budget.json').then(r => r.json()).catch(() => []),
@@ -1981,9 +2017,10 @@ export default function PerformanceTracker({ initialLocTypes, initialPractices, 
       fetch('/data/performance/weekly-metrics-provider.json').then(r => r.json()).catch(() => []),
       fetch('/data/performance/weekly-ops-provider.json').then(r => r.json()).catch(() => []),
       fetch('/data/performance/weekly-util-hours-provider.json').then(r => r.json()).catch(() => []),
-    ]).then(([locs, met, ops, btx, bud, injRevProv, btxProv, ntxFiller, syrLoc, syrProv, revCollProv, provHours, utilization, metricsProvData, opsProvData, utilHoursProvData]) => {
+    ]).then(([locs, met, daily, ops, btx, bud, injRevProv, btxProv, ntxFiller, syrLoc, syrProv, revCollProv, provHours, utilization, metricsProvData, opsProvData, utilHoursProvData]) => {
       setLocations(locs);
       setMetrics(met);
+      setDailyMetrics(daily);
       setOpsData(ops);
       setBtxData(btx);
       setBudgetData(bud);
@@ -4086,6 +4123,7 @@ export default function PerformanceTracker({ initialLocTypes, initialPractices, 
             location={globalSelectedLocs[0]}
             locations={locations}
             metrics={metrics}
+            dailyMetrics={dailyMetrics}
             opsData={opsData}
             btxData={btxData}
             syringeLocData={syringeLocData}
