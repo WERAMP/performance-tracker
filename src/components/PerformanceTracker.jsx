@@ -4033,6 +4033,26 @@ export default function PerformanceTracker({ initialLocTypes, initialPractices, 
         </p>
         <div style={{ width: 40, height: 3, background: V.gold, borderRadius: 2, marginBottom: 28 }} />
 
+        {/* ── Location Performance Report (single location) ── */}
+        {globalSelectedLocs.length === 1 && (
+          <LocationReport
+            location={globalSelectedLocs[0]}
+            locations={locations}
+            metrics={metrics}
+            dailyMetrics={dailyMetrics}
+            opsData={opsData}
+            btxData={btxData}
+            syringeLocData={syringeLocData}
+            utilizationData={utilizationData}
+            providerHoursData={providerHoursData}
+            injRevProviderData={injRevProviderData}
+            btxProviderData={btxProviderData}
+            syringeProvData={syringeProvData}
+            revCollProvData={revCollProvData}
+            budgetData={budgetData}
+          />
+        )}
+
         {/* ── Filter Bar ──────────────────────────────────── */}
         <div style={{
           display: 'flex', alignItems: 'center', gap: 16,
@@ -4146,27 +4166,6 @@ export default function PerformanceTracker({ initialLocTypes, initialPractices, 
             </div>
           </>)}
         </div>
-
-
-        {/* ── Location Performance Report (single location) ── */}
-        {globalSelectedLocs.length === 1 && (
-          <LocationReport
-            location={globalSelectedLocs[0]}
-            locations={locations}
-            metrics={metrics}
-            dailyMetrics={dailyMetrics}
-            opsData={opsData}
-            btxData={btxData}
-            syringeLocData={syringeLocData}
-            utilizationData={utilizationData}
-            providerHoursData={providerHoursData}
-            injRevProviderData={injRevProviderData}
-            btxProviderData={btxProviderData}
-            syringeProvData={syringeProvData}
-            revCollProvData={revCollProvData}
-            budgetData={budgetData}
-          />
-        )}
 
         {/* ══════════════════════════════════════════════════
            SECTION 1: Top Line Performance Deep Dive
