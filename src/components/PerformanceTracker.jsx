@@ -975,6 +975,14 @@ function LocationReport({ location, locations, metrics, dailyMetrics, opsData, b
       if (!rows.length) return null;
       return rows.reduce((s, r) => s + (Number(r[field]) || 0), 0) / rows.length;
     };
+    // avgNonZero: like avg but skips rows where the field is 0 (used for utilization,
+    // where 0 means "not yet calculated" rather than genuinely 0% utilization)
+    const avgNonZero = (data, locName, field) => {
+      if (!data || !data.length) return null;
+      const rows = data.filter(r => r.c === locName && periodSet.has(r.w) && Number(r[field]) > 0);
+      if (!rows.length) return null;
+      return rows.reduce((s, r) => s + (Number(r[field]) || 0), 0) / rows.length;
+    };
     const sum4 = (data, locName, field) => {
       if (!data || !data.length) return 0;
       return data.filter(r => r.c === locName && periodSet.has(r.w)).reduce((s, r) => s + (Number(r[field]) || 0), 0);
@@ -1051,8 +1059,12 @@ function LocationReport({ location, locations, metrics, dailyMetrics, opsData, b
     const locNoshowRate = avg(opsData, location, 'ns');
     const peerNoshowRate = avgMulti(opsData, peers, 'ns');
 
-    const locUtil = avg(utilizationData, location, 'ur');
-    const peerUtil = avgMulti(utilizationData, peers, 'ur');
+    const locUtil = avgNonZero(utilizationData, location, 'ur');
+    const peerUtil = (() => {
+      if (!utilizationData || !utilizationData.length) return null;
+      const vals = peers.map(n => avgNonZero(utilizationData, n, 'ur')).filter(v => v != null);
+      return vals.length ? vals.reduce((s, v) => s + v, 0) / vals.length : null;
+    })();
 
     const locPatients = avg(metrics, location, 'p');
     const peerPatients = avgMulti(metrics, peers, 'p');
