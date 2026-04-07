@@ -911,7 +911,12 @@ function LocationReport({ location, locations, metrics, dailyMetrics, opsData, b
       const wEnd = new Date(wStart); wEnd.setDate(wEnd.getDate() + 6);
       return wEnd >= fromDate && wStart <= toDate;
     };
-    if (reportPeriod === 'MTD') {
+    if (reportPeriod === 'YESTERDAY') {
+      // Strictly yesterday — single calendar day
+      const yest = new Date(todayD); yest.setDate(yest.getDate() - 1);
+      periodWeeks = allWeeks.filter(w => weekOverlaps(w, yest, yest));
+      periodLabel = yest.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' });
+    } else if (reportPeriod === 'MTD') {
       // Full calendar month — from the 1st through the last day of the current month
       const from = new Date(currentYear, currentMonth, 1);
       const to   = new Date(currentYear, currentMonth + 1, 0); // last day of month
@@ -951,7 +956,11 @@ function LocationReport({ location, locations, metrics, dailyMetrics, opsData, b
     // ── Exact daily date range for KPI actuals (no week-boundary bleed) ──────
     // kpiFrom/kpiTo are ISO date strings used to filter daily-metrics.json
     let kpiFrom, kpiTo = todayStr;
-    if (reportPeriod === 'MTD') {
+    if (reportPeriod === 'YESTERDAY') {
+      const yest = new Date(todayD); yest.setDate(yest.getDate() - 1);
+      kpiFrom = yest.toISOString().slice(0, 10);
+      kpiTo   = kpiFrom; // single day
+    } else if (reportPeriod === 'MTD') {
       kpiFrom = `${currentYear}-${String(currentMonth + 1).padStart(2, '0')}-01`;
     } else if (reportPeriod === 'QTD') {
       const qStart = Math.floor(currentMonth / 3) * 3;
@@ -1538,7 +1547,7 @@ function LocationReport({ location, locations, metrics, dailyMetrics, opsData, b
         {/* Period selector */}
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
           <span style={{ fontSize: 10, fontFamily: FONT.body, color: 'rgba(255,255,255,0.55)', letterSpacing: 0.8, textTransform: 'uppercase' }}>Period</span>
-          {[['MTD','MTD'], ['QTD','QTD'], ['YTD','YTD'], ['L30','Last 30'], ['L60','Last 60']].map(([key, label]) => (
+          {[['YESTERDAY','Yesterday'], ['MTD','MTD'], ['QTD','QTD'], ['YTD','YTD'], ['L30','Last 30'], ['L60','Last 60']].map(([key, label]) => (
             <button
               key={key}
               onClick={() => setReportPeriod(key)}
