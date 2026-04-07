@@ -1012,11 +1012,30 @@ function LocationReport({ location, locations, metrics, dailyMetrics, opsData, b
 
     const locColl = sumDaily(location, 'co');
     const locCollPct = locRev > 0 ? locColl / locRev * 100 : null;
-    const locRevBudget = sum4(budgetData || [], location, 'b');
-    const locCollBudget = (() => {
-      const rows = (budgetData || []).filter(r => r.c === location && periodSet.has(r.w) && r.cb != null);
-      return rows.reduce((s, r) => s + (Number(r.cb) || 0), 0);
-    })();
+    // Pro-rate weekly budget to the exact daily period [kpiFrom, kpiTo].
+    // Each week's budget is distributed evenly across its 7 calendar days;
+    // only the days that fall within the period are counted.
+    const proRateBudget = (locName, field) => {
+      if (!budgetData || !budgetData.length) return 0;
+      const from = new Date(kpiFrom + 'T00:00:00');
+      const to   = new Date(kpiTo   + 'T00:00:00');
+      let total = 0;
+      for (const row of budgetData) {
+        if (row.c !== locName) continue;
+        const val = Number(row[field]);
+        if (!val || val <= 0) continue;
+        const wStart = new Date(row.w + 'T00:00:00');
+        const wEnd   = new Date(wStart); wEnd.setDate(wEnd.getDate() + 6);
+        const overlapStart = from > wStart ? from : wStart;
+        const overlapEnd   = to   < wEnd   ? to   : wEnd;
+        if (overlapEnd < overlapStart) continue;
+        const daysOverlap = Math.round((overlapEnd - overlapStart) / 86400000) + 1;
+        total += (val / 7) * daysOverlap;
+      }
+      return total;
+    };
+    const locRevBudget  = proRateBudget(location, 'b');
+    const locCollBudget = proRateBudget(location, 'cb');
     const peerColl = peers.reduce((s, p) => s + sumDaily(p, 'co'), 0);
     const peerCollPct = peerRev > 0 ? peerColl / peerRev * 100 : null;
 
