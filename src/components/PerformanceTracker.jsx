@@ -1066,11 +1066,19 @@ function LocationReport({ location, locations, metrics, dailyMetrics, opsData, b
     const peerColl = peers.reduce((s, p) => s + sumDaily(p, 'co'), 0);
     const peerCollPct = peerRev > 0 ? peerColl / peerRev * 100 : null;
 
-    const locBtxUnits = avg(btxData, location, 'b');
-    const peerBtxUnits = avgMulti(btxData, peers, 'b');
+    // Botox units: weighted avg = total_qty / invoice count, using provider-level data
+    const locBtxProvRows = (btxProviderData || []).filter(r => r.c === location && periodSet.has(r.w));
+    const locBtxTotalQty = locBtxProvRows.reduce((s, r) => s + (Number(r.total_qty) || 0), 0);
+    const locBtxTotalN   = locBtxProvRows.reduce((s, r) => s + (Number(r.n) || 0), 0);
+    const locBtxUnits = locBtxTotalN > 0 ? locBtxTotalQty / locBtxTotalN : null;
 
-    const locSyringes = avg(syringeLocData, location, 'sf');
-    const peerSyringes = avgMulti(syringeLocData, peers, 'sf');
+    const peerBtxProvRows = (btxProviderData || []).filter(r => peers.includes(r.c) && periodSet.has(r.w));
+    const peerBtxQty = peerBtxProvRows.reduce((s, r) => s + (Number(r.total_qty) || 0), 0);
+    const peerBtxN   = peerBtxProvRows.reduce((s, r) => s + (Number(r.n) || 0), 0);
+    const peerBtxUnits = peerBtxN > 0 ? peerBtxQty / peerBtxN : null;
+
+    const locSyringes = avg(syringeLocData, location, 'syr');
+    const peerSyringes = avgMulti(syringeLocData, peers, 'syr');
 
     const locCancelRate = avg(opsData, location, 'cn');
     const peerCancelRate = avgMulti(opsData, peers, 'cn');
@@ -1160,8 +1168,8 @@ function LocationReport({ location, locations, metrics, dailyMetrics, opsData, b
       return v2 - v1;
     })();
 
-    const btxTrend = computeTrend(btxData, location, 'b');
-    const syringeTrend = computeTrend(syringeLocData, location, 'sf');
+    const btxTrend = computeTrend(btxData, location, 'avg_units');
+    const syringeTrend = computeTrend(syringeLocData, location, 'syr');
     const cancelTrend = computeTrend(opsData, location, 'cn');
     const noshowTrend = computeTrend(opsData, location, 'ns');
     const utilTrend = computeTrend(utilizationData, location, 'ur');
@@ -1209,8 +1217,8 @@ function LocationReport({ location, locations, metrics, dailyMetrics, opsData, b
       const totalH = uhRows.reduce((s, r) => s + (Number(r.h) || 0), 0);
       const nonZeroUtil = uhRows.filter(r => Number(r.ur) > 0);
       const utilAvg = nonZeroUtil.length > 0 ? nonZeroUtil.reduce((s, r) => s + (Number(r.ur) || 0), 0) / nonZeroUtil.length : null;
-      const btxTotalQty = btxRows.reduce((s, r) => s + (Number(r.b) || 0) * (Number(r.n) || 1), 0);
-      const btxTotalN = btxRows.reduce((s, r) => s + (Number(r.n) || 1), 0);
+      const btxTotalQty = btxRows.reduce((s, r) => s + (Number(r.total_qty) || 0), 0);
+      const btxTotalN   = btxRows.reduce((s, r) => s + (Number(r.n)         || 0), 0);
       const avgBtxUnits = btxTotalN > 0 ? btxTotalQty / btxTotalN : null;
       const syrFillerRows = syrRows.filter(r => r.sf != null);
       const avgSyrFiller = syrFillerRows.length > 0 ? syrFillerRows.reduce((s, r) => s + (Number(r.sf) || 0), 0) / syrFillerRows.length : null;
@@ -1236,10 +1244,23 @@ function LocationReport({ location, locations, metrics, dailyMetrics, opsData, b
       };
     };
 
-    const kpiFiltered = computeProvFiltered(
+    // Count distinct providers who have ANY data for this location in this period.
+    // When the selected set covers all of them, fall back to the accurate daily-data totals.
+    const _allProvForLoc = new Set([
+      ...(metricsProviderData  || []).filter(r => r.c === location && periodSet.has(r.w)).map(r => r.pr),
+      ...(btxProviderData      || []).filter(r => r.c === location && periodSet.has(r.w)).map(r => r.pr),
+      ...(syringeProvData      || []).filter(r => r.c === location && periodSet.has(r.w)).map(r => r.pr),
+      ...(revCollProvData      || []).filter(r => r.c === location && periodSet.has(r.w)).map(r => r.pr),
+      ...(injRevProviderData   || []).filter(r => r.c === location && periodSet.has(r.w)).map(r => r.pr),
+    ].filter(Boolean));
+
+    const kpiIsAllSelected = !kpiProviders || kpiProviders.size === 0 || kpiProviders.size >= _allProvForLoc.size;
+    const effIsAllSelected = !effProviders || effProviders.size === 0 || effProviders.size >= _allProvForLoc.size;
+
+    const kpiFiltered = kpiIsAllSelected ? null : computeProvFiltered(
       kpiProviders, metricsProviderData, revCollProvData, opsProviderData, utilHoursProviderData, btxProviderData, syringeProvData
     );
-    const effFiltered = computeProvFiltered(
+    const effFiltered = effIsAllSelected ? null : computeProvFiltered(
       effProviders, metricsProviderData, revCollProvData, opsProviderData, utilHoursProviderData, btxProviderData, syringeProvData
     );
 
@@ -1267,8 +1288,8 @@ function LocationReport({ location, locations, metrics, dailyMetrics, opsData, b
       const peerBtxProviders = [...new Set(peerBtxRows.map(r => r.pr))];
       const peerAvgBtx = peerBtxProviders.length > 0
         ? (() => {
-          const totalUnits = peerBtxRows.reduce((s, r) => s + (Number(r.b) || 0) * (Number(r.n) || 1), 0);
-          const totalN = peerBtxRows.reduce((s, r) => s + (Number(r.n) || 1), 0);
+          const totalUnits = peerBtxRows.reduce((s, r) => s + (Number(r.total_qty) || 0), 0);
+          const totalN = peerBtxRows.reduce((s, r) => s + (Number(r.n) || 0), 0);
           return totalN > 0 ? totalUnits / totalN : null;
         })()
         : null;
@@ -1304,15 +1325,55 @@ function LocationReport({ location, locations, metrics, dailyMetrics, opsData, b
         })()
         : null;
 
+      // Peer averages for new metrics: Avg Rev Per Patient, Utilization, Rev Per Hour
+      const peerMpRows = (metricsProviderData || []).filter(r => peers.includes(r.c) && periodSet.has(r.w));
+      const peerMpProviders = [...new Set(peerMpRows.map(r => r.pr))];
+      const peerAvgRevPerPt = peerMpProviders.length > 0
+        ? (() => {
+          const vals = peerMpProviders.map(pr => {
+            const rows = peerMpRows.filter(r => r.pr === pr);
+            const rev = rows.reduce((s, r) => s + (Number(r.s) || 0), 0);
+            const pt  = rows.reduce((s, r) => s + (Number(r.p) || 0), 0);
+            return pt > 0 ? rev / pt : null;
+          }).filter(v => v != null);
+          return vals.length ? vals.reduce((s, v) => s + v, 0) / vals.length : null;
+        })()
+        : null;
+
+      const peerUhRows = (utilHoursProviderData || []).filter(r => peers.includes(r.c) && periodSet.has(r.w));
+      const peerUhProviders = [...new Set(peerUhRows.map(r => r.pr))];
+      const peerAvgUtil = peerUhProviders.length > 0
+        ? (() => {
+          const vals = peerUhProviders.map(pr => {
+            const rows = peerUhRows.filter(r => r.pr === pr && Number(r.ur) > 0);
+            return rows.length ? rows.reduce((s, r) => s + (Number(r.ur) || 0), 0) / rows.length : null;
+          }).filter(v => v != null);
+          return vals.length ? vals.reduce((s, v) => s + v, 0) / vals.length : null;
+        })()
+        : null;
+
+      const peerAvgRevPerHour = peerUhProviders.length > 0
+        ? (() => {
+          const vals = peerUhProviders.map(pr => {
+            const uhRows = peerUhRows.filter(r => r.pr === pr);
+            const rcRows = peerRevCollRows.filter(r => r.pr === pr);
+            const rev = rcRows.reduce((s, r) => s + (Number(r.rev) || 0), 0);
+            const hrs = uhRows.reduce((s, r) => s + (Number(r.h) || 0), 0);
+            return hrs > 0 ? rev / hrs : null;
+          }).filter(v => v != null);
+          return vals.length ? vals.reduce((s, v) => s + v, 0) / vals.length : null;
+        })()
+        : null;
+
       const cards = providerNames.map(pr => {
         // Injectable revenue (sum over 4 weeks)
         const prInjRows = provRows.filter(r => r.pr === pr);
         const injRev = prInjRows.reduce((s, r) => s + (Number(r.r) || 0), 0);
 
-        // Botox units (weighted avg)
+        // Botox units (weighted avg = total units / invoice count)
         const prBtxRows = (btxProviderData || []).filter(r => r.c === location && r.pr === pr && periodSet.has(r.w));
-        const btxTotal = prBtxRows.reduce((s, r) => s + (Number(r.b) || 0) * (Number(r.n) || 1), 0);
-        const btxN = prBtxRows.reduce((s, r) => s + (Number(r.n) || 1), 0);
+        const btxTotal = prBtxRows.reduce((s, r) => s + (Number(r.total_qty) || 0), 0);
+        const btxN = prBtxRows.reduce((s, r) => s + (Number(r.n) || 0), 0);
         const avgBtx = btxN > 0 ? btxTotal / btxN : null;
 
         // Syringe data
@@ -1325,6 +1386,18 @@ function LocationReport({ location, locations, metrics, dailyMetrics, opsData, b
         const prRev = prCollRows.reduce((s, r) => s + (Number(r.rev) || 0), 0);
         const prCollVal = prCollRows.reduce((s, r) => s + (Number(r.coll) || 0), 0);
         const collPct = prRev > 0 ? (prCollVal / prRev) * 100 : null;
+
+        // Avg Rev Per Patient
+        const prMpRows = (metricsProviderData || []).filter(r => r.c === location && r.pr === pr && periodSet.has(r.w));
+        const prTotalPt = prMpRows.reduce((s, r) => s + (Number(r.p) || 0), 0);
+        const avgRevPerPt = prTotalPt > 0 ? prRev / prTotalPt : null;
+
+        // Utilization & Rev Per Net Provider Hour
+        const prUhRows = (utilHoursProviderData || []).filter(r => r.c === location && r.pr === pr && periodSet.has(r.w));
+        const prNonZeroUtil = prUhRows.filter(r => Number(r.ur) > 0);
+        const provUtil = prNonZeroUtil.length > 0 ? prNonZeroUtil.reduce((s, r) => s + (Number(r.ur) || 0), 0) / prNonZeroUtil.length : null;
+        const prTotalH = prUhRows.reduce((s, r) => s + (Number(r.h) || 0), 0);
+        const provRevPerHour = prTotalH > 0 ? prRev / prTotalH : null;
 
         // Determine weakest metric vs peers
         const gaps = [];
@@ -1346,7 +1419,9 @@ function LocationReport({ location, locations, metrics, dailyMetrics, opsData, b
 
         return {
           name: pr, injRev, avgBtx, avgSyrInj, avgSyrFiller, collPct,
+          avgRevPerPt, provUtil, provRevPerHour,
           peerAvgInjRev, peerAvgBtx, peerAvgSyrInj, peerAvgSyrFiller, peerAvgCollPct,
+          peerAvgRevPerPt, peerAvgUtil, peerAvgRevPerHour,
           recommendation: weakest ? recMap[weakest] : null,
         };
       }).sort((a, b) => b.injRev - a.injRev);
@@ -1470,9 +1545,9 @@ function LocationReport({ location, locations, metrics, dailyMetrics, opsData, b
       locRev, locColl, locRevBudget, locCollBudget,
       locRevPerPt, locRetailPct, locUtil, locCancelRate, locNoshowRate,
       kpis: [
-        { name: 'Revenue', value: kpiFiltered ? kpiFiltered.rev : locRev, peerAvg: peerRev, goal: locRevBudget, format: 'dollar', higherBetter: true, trend: revTrend },
-        { name: 'Collections', value: kpiFiltered ? kpiFiltered.coll : locColl, peerAvg: peerColl, goal: locCollBudget, format: 'dollar', higherBetter: true, trend: null },
-        { name: 'Avg Revenue Per Patient', value: kpiFiltered ? kpiFiltered.revPerPt : locRevPerPt, peerAvg: peerRevPerPt, goal: null, format: 'dollar', higherBetter: true, trend: revPerPtTrend },
+        { name: 'Revenue', value: kpiFiltered ? kpiFiltered.rev : locRev, peerAvg: peerRev, goal: kpiFiltered ? null : (locRevBudget || null), format: 'dollar', higherBetter: true, trend: revTrend },
+        { name: 'Collections', value: kpiFiltered ? kpiFiltered.coll : locColl, peerAvg: peerColl, goal: kpiFiltered ? null : (locCollBudget || null), format: 'dollar', higherBetter: true, trend: null },
+        { name: 'Avg Revenue Per Patient', value: kpiFiltered ? kpiFiltered.revPerPt : locRevPerPt, peerAvg: peerRevPerPt, goal: 500, format: 'dollar', higherBetter: true, trend: revPerPtTrend },
         { name: 'Retail % of Sales', value: kpiFiltered ? kpiFiltered.retailPct : locRetailPct, peerAvg: peerRetailPct, goal: 7.5, format: 'pct', higherBetter: true, trend: retailPctTrend },
         { name: 'Injectables % of Sales', value: kpiFiltered ? kpiFiltered.injPct : locInjPct, peerAvg: peerInjPct, goal: null, format: 'pct', higherBetter: true, trend: injPctTrend },
         { name: 'Collections % of Revenue', value: kpiFiltered ? kpiFiltered.collPct : locCollPct, peerAvg: peerCollPct, goal: null, format: 'pct', higherBetter: true, trend: collPctTrend },
@@ -2059,6 +2134,9 @@ function LocationReport({ location, locations, metrics, dailyMetrics, opsData, b
                     { label: 'Avg Syr/Inj Appt', value: prov.avgSyrInj, peerAvg: prov.peerAvgSyrInj, format: 'num1', higherBetter: true },
                     { label: 'Avg Syr/Filler Appt', value: prov.avgSyrFiller, peerAvg: prov.peerAvgSyrFiller, format: 'num1', higherBetter: true },
                     { label: 'Collections %', value: prov.collPct, peerAvg: prov.peerAvgCollPct, format: 'pct', higherBetter: true },
+                    { label: 'Avg Rev Per Patient', value: prov.avgRevPerPt, peerAvg: prov.peerAvgRevPerPt, format: 'dollar', higherBetter: true },
+                    { label: 'Utilization', value: prov.provUtil, peerAvg: prov.peerAvgUtil, format: 'pct', higherBetter: true },
+                    { label: 'Rev Per Net Hr', value: prov.provRevPerHour, peerAvg: prov.peerAvgRevPerHour, format: 'dollar', higherBetter: true },
                   ];
                   return (
                     <div key={prov.name} style={{
