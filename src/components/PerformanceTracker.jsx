@@ -4706,64 +4706,59 @@ export default function PerformanceTracker({ initialLocTypes, initialPractices, 
         </div>
         <div style={{ display: sectionsMinimized.section1 ? 'none' : 'block' }}>
 
-        {/* MTD Summary + Service Mix (left 25%) | Weekly Charts (right 75%) */}
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 3fr', gap: 24, marginBottom: 24 }}>
-          {/* Left column: MTD table */}
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-            <ChartCard title="MTD Revenue & Collections vs Budget">
-              <MTDSummaryTable data={mtdSummary} />
-            </ChartCard>
-          </div>
-          {/* Right column: two weekly charts stacked with location dropdowns */}
-          <div style={{ display: 'grid', gridTemplateRows: '1fr 1fr', gap: 16 }}>
-            <ChartCard
-              title="Revenue vs Budget"
-              headerRight={
-                <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-                  <ChartTimeControl chartId="revChart" globalMode={globalTimeMode} globalCount={globalPeriodCount} overrides={chartTimeOverrides} setOverrides={setChartTimeOverrides} />
-                  <MultiSelectDropdown
-                    label="Location"
-                    options={['Total', ...locationNames]}
-                    selected={revChartLocs}
-                    onChange={setRevChartLocs}
-                    minWidth={85}
-                  />
-                </div>
-              }
-            >
-              <MultiLineChart
-                data={revChartData}
-                series={revChartSeries}
-                height={300}
-                formatter={fmtK}
-                colorMap={{ 'All Locations': V.gold, Budget: V.navy, ...locationColorMap }}
-              />
-            </ChartCard>
-            <ChartCard
-              title="Collections vs Budget"
-              headerRight={
-                <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-                  <ChartTimeControl chartId="collChart" globalMode={globalTimeMode} globalCount={globalPeriodCount} overrides={chartTimeOverrides} setOverrides={setChartTimeOverrides} />
-                  <MultiSelectDropdown
-                    label="Location"
-                    options={['Total', ...locationNames]}
-                    selected={collChartLocs}
-                    onChange={setCollChartLocs}
-                    minWidth={85}
-                  />
-                </div>
-              }
-            >
-              <MultiLineChart
-                data={collChartData}
-                series={collChartSeries}
-                height={300}
-                formatter={fmtK}
-                colorMap={{ 'All Locations': V.gold, Budget: V.navy, ...locationColorMap }}
-                rightAxisSeries={collChartLocs.filter(n => n !== 'Total')}
-              />
-            </ChartCard>
-          </div>
+        {/* Revenue vs Budget — full width */}
+        <div style={{ marginBottom: 24 }}>
+          <ChartCard
+            title="Revenue vs Budget"
+            headerRight={
+              <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                <ChartTimeControl chartId="revChart" globalMode={globalTimeMode} globalCount={globalPeriodCount} overrides={chartTimeOverrides} setOverrides={setChartTimeOverrides} />
+                <MultiSelectDropdown
+                  label="Location"
+                  options={['Total', ...locationNames]}
+                  selected={revChartLocs}
+                  onChange={setRevChartLocs}
+                  minWidth={85}
+                />
+              </div>
+            }
+          >
+            <MultiLineChart
+              data={revChartData}
+              series={revChartSeries}
+              height={300}
+              formatter={fmtK}
+              colorMap={{ 'All Locations': V.gold, Budget: V.navy, ...locationColorMap }}
+            />
+          </ChartCard>
+        </div>
+
+        {/* Collections vs Budget — full width */}
+        <div style={{ marginBottom: 24 }}>
+          <ChartCard
+            title="Collections vs Budget"
+            headerRight={
+              <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                <ChartTimeControl chartId="collChart" globalMode={globalTimeMode} globalCount={globalPeriodCount} overrides={chartTimeOverrides} setOverrides={setChartTimeOverrides} />
+                <MultiSelectDropdown
+                  label="Location"
+                  options={['Total', ...locationNames]}
+                  selected={collChartLocs}
+                  onChange={setCollChartLocs}
+                  minWidth={85}
+                />
+              </div>
+            }
+          >
+            <MultiLineChart
+              data={collChartData}
+              series={collChartSeries}
+              height={300}
+              formatter={fmtK}
+              colorMap={{ 'All Locations': V.gold, Budget: V.navy, ...locationColorMap }}
+              rightAxisSeries={collChartLocs.filter(n => n !== 'Total')}
+            />
+          </ChartCard>
         </div>
 
         {/* Revenue vs Collections with Coll % of Rev */}
