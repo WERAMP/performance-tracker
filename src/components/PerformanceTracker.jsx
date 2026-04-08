@@ -1018,6 +1018,11 @@ function LocationReport({ location, locations, metrics, dailyMetrics, opsData, b
       const vals = locNames.map(n => avg(data, n, field)).filter(v => v != null);
       return vals.length ? vals.reduce((s, v) => s + v, 0) / vals.length : null;
     };
+    const avgNonZeroMulti = (data, locNames, field) => {
+      if (!data || !data.length) return null;
+      const vals = locNames.map(n => avgNonZero(data, n, field)).filter(v => v != null);
+      return vals.length ? vals.reduce((s, v) => s + v, 0) / vals.length : null;
+    };
 
     // KPI calculations — financial metrics use daily data for exact period sums
     const locRev = sumDaily(location, 's');
@@ -1203,7 +1208,7 @@ function LocationReport({ location, locations, metrics, dailyMetrics, opsData, b
       const rcpRows = (rcpData || []).filter(r => r.c === location && periodSet.has(r.w) && provSet.has(r.pr));
       const opsRows = (opsPData || []).filter(r => r.c === location && periodSet.has(r.w) && provSet.has(r.pr));
       const uhRows = (uhData || []).filter(r => r.c === location && periodSet.has(r.w) && provSet.has(r.pr));
-      const btxRows = (btxPData || []).filter(r => r.c === location && periodSet.has(r.w) && provSet.has(r.pr));
+      const btxRows = (btxPData || []).filter(r => r.c === location && periodSet.has(r.w) && provSet.has(r.pr) && (Number(r.total_qty) || 0) > 0);
       const syrRows = (syrPData || []).filter(r => r.c === location && periodSet.has(r.w) && provSet.has(r.pr));
 
       const rev = mpRows.reduce((s, r) => s + (Number(r.s) || 0), 0);
@@ -1220,7 +1225,7 @@ function LocationReport({ location, locations, metrics, dailyMetrics, opsData, b
       const btxTotalQty = btxRows.reduce((s, r) => s + (Number(r.total_qty) || 0), 0);
       const btxTotalN   = btxRows.reduce((s, r) => s + (Number(r.n)         || 0), 0);
       const avgBtxUnits = btxTotalN > 0 ? btxTotalQty / btxTotalN : null;
-      const syrFillerRows = syrRows.filter(r => r.sf != null);
+      const syrFillerRows = syrRows.filter(r => r.sf != null && Number(r.sf) > 0);
       const avgSyrFiller = syrFillerRows.length > 0 ? syrFillerRows.reduce((s, r) => s + (Number(r.sf) || 0), 0) / syrFillerRows.length : null;
       const numWeeks = periodSet.size || 1;
 
@@ -1284,7 +1289,7 @@ function LocationReport({ location, locations, metrics, dailyMetrics, opsData, b
         ? allPeerProviders.map(pr => peerInjRevRows.filter(r => r.pr === pr).reduce((s, r) => s + (Number(r.r) || 0), 0)).reduce((s, v) => s + v, 0) / allPeerProviders.length
         : null;
 
-      const peerBtxRows = (btxProviderData || []).filter(r => peers.includes(r.c) && periodSet.has(r.w));
+      const peerBtxRows = (btxProviderData || []).filter(r => peers.includes(r.c) && periodSet.has(r.w) && (Number(r.total_qty) || 0) > 0);
       const peerBtxProviders = [...new Set(peerBtxRows.map(r => r.pr))];
       const peerAvgBtx = peerBtxProviders.length > 0
         ? (() => {
@@ -1299,7 +1304,7 @@ function LocationReport({ location, locations, metrics, dailyMetrics, opsData, b
       const peerAvgSyrInj = peerSyrProviders.length > 0
         ? (() => {
           const vals = peerSyrProviders.map(pr => {
-            const rows = peerSyrRows.filter(r => r.pr === pr);
+            const rows = peerSyrRows.filter(r => r.pr === pr && r.si != null && Number(r.si) > 0);
             return rows.length ? rows.reduce((s, r) => s + (Number(r.si) || 0), 0) / rows.length : null;
           }).filter(v => v != null);
           return vals.length ? vals.reduce((s, v) => s + v, 0) / vals.length : null;
@@ -1308,7 +1313,7 @@ function LocationReport({ location, locations, metrics, dailyMetrics, opsData, b
       const peerAvgSyrFiller = peerSyrProviders.length > 0
         ? (() => {
           const vals = peerSyrProviders.map(pr => {
-            const rows = peerSyrRows.filter(r => r.pr === pr);
+            const rows = peerSyrRows.filter(r => r.pr === pr && r.sf != null && Number(r.sf) > 0);
             return rows.length ? rows.reduce((s, r) => s + (Number(r.sf) || 0), 0) / rows.length : null;
           }).filter(v => v != null);
           return vals.length ? vals.reduce((s, v) => s + v, 0) / vals.length : null;
@@ -1371,15 +1376,17 @@ function LocationReport({ location, locations, metrics, dailyMetrics, opsData, b
         const injRev = prInjRows.reduce((s, r) => s + (Number(r.r) || 0), 0);
 
         // Botox units (weighted avg = total units / invoice count)
-        const prBtxRows = (btxProviderData || []).filter(r => r.c === location && r.pr === pr && periodSet.has(r.w));
+        const prBtxRows = (btxProviderData || []).filter(r => r.c === location && r.pr === pr && periodSet.has(r.w) && (Number(r.total_qty) || 0) > 0);
         const btxTotal = prBtxRows.reduce((s, r) => s + (Number(r.total_qty) || 0), 0);
         const btxN = prBtxRows.reduce((s, r) => s + (Number(r.n) || 0), 0);
         const avgBtx = btxN > 0 ? btxTotal / btxN : null;
 
         // Syringe data
         const prSyrRows = (syringeProvData || []).filter(r => r.c === location && r.pr === pr && periodSet.has(r.w));
-        const avgSyrInj = prSyrRows.length ? prSyrRows.reduce((s, r) => s + (Number(r.si) || 0), 0) / prSyrRows.length : null;
-        const avgSyrFiller = prSyrRows.length ? prSyrRows.reduce((s, r) => s + (Number(r.sf) || 0), 0) / prSyrRows.length : null;
+        const prSyrInjRows = prSyrRows.filter(r => r.si != null && Number(r.si) > 0);
+        const prSyrFillerRows = prSyrRows.filter(r => r.sf != null && Number(r.sf) > 0);
+        const avgSyrInj = prSyrInjRows.length ? prSyrInjRows.reduce((s, r) => s + (Number(r.si) || 0), 0) / prSyrInjRows.length : null;
+        const avgSyrFiller = prSyrFillerRows.length ? prSyrFillerRows.reduce((s, r) => s + (Number(r.sf) || 0), 0) / prSyrFillerRows.length : null;
 
         // Collections %
         const prCollRows = (revCollProvData || []).filter(r => r.c === location && r.pr === pr && periodSet.has(r.w));
