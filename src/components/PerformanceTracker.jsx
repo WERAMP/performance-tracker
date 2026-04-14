@@ -1082,8 +1082,8 @@ function LocationReport({ location, locations, metrics, dailyMetrics, opsData, b
     const peerBtxN   = peerBtxProvRows.reduce((s, r) => s + (Number(r.n) || 0), 0);
     const peerBtxUnits = peerBtxN > 0 ? peerBtxQty / peerBtxN : null;
 
-    const locSyringes = avg(syringeLocData, location, 'syr');
-    const peerSyringes = avgMulti(syringeLocData, peers, 'syr');
+    const locSyringes = avg(syringeLocData, location, 'sf');
+    const peerSyringes = avgMulti(syringeLocData, peers, 'sf');
 
     const locCancelRate = avg(opsData, location, 'cn');
     const peerCancelRate = avgMulti(opsData, peers, 'cn');
@@ -1174,7 +1174,7 @@ function LocationReport({ location, locations, metrics, dailyMetrics, opsData, b
     })();
 
     const btxTrend = computeTrend(btxData, location, 'avg_units');
-    const syringeTrend = computeTrend(syringeLocData, location, 'syr');
+    const syringeTrend = computeTrend(syringeLocData, location, 'sf');
     const cancelTrend = computeTrend(opsData, location, 'cn');
     const noshowTrend = computeTrend(opsData, location, 'ns');
     const utilTrend = computeTrend(utilizationData, location, 'ur');
