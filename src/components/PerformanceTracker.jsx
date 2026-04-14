@@ -1068,6 +1068,30 @@ function LocationReport({ location, locations, metrics, dailyMetrics, opsData, b
     };
     const locRevBudget  = proRateBudget(location, 'b');
     const locCollBudget = proRateBudget(location, 'cb');
+
+    // Full-month budget (only meaningful for MTD — covers 1st through last day of month)
+    const fullMonthBudget = (locName, field) => {
+      if (reportPeriod !== 'MTD' || !budgetData || !budgetData.length) return 0;
+      const from = new Date(currentYear, currentMonth, 1);
+      const to   = new Date(currentYear, currentMonth + 1, 0); // last day of month
+      let total = 0;
+      for (const row of budgetData) {
+        if (row.c !== locName) continue;
+        const val = Number(row[field]);
+        if (!val || val <= 0) continue;
+        const wStart = new Date(row.w + 'T00:00:00');
+        const wEnd   = new Date(wStart); wEnd.setDate(wEnd.getDate() + 6);
+        const overlapStart = from > wStart ? from : wStart;
+        const overlapEnd   = to   < wEnd   ? to   : wEnd;
+        if (overlapEnd < overlapStart) continue;
+        const daysOverlap = Math.round((overlapEnd - overlapStart) / 86400000) + 1;
+        total += (val / 7) * daysOverlap;
+      }
+      return total;
+    };
+    const fullMonthRevBudget  = fullMonthBudget(location, 'b');
+    const fullMonthCollBudget = fullMonthBudget(location, 'cb');
+
     const peerColl = peers.reduce((s, p) => s + sumDaily(p, 'co'), 0);
     const peerCollPct = peerRev > 0 ? peerColl / peerRev * 100 : null;
 
@@ -1549,7 +1573,7 @@ function LocationReport({ location, locations, metrics, dailyMetrics, opsData, b
       locType, peers,
       periodLabel,
       // Top-level KPI values for the 6 summary boxes
-      locRev, locColl, locRevBudget, locCollBudget,
+      locRev, locColl, locRevBudget, locCollBudget, fullMonthRevBudget, fullMonthCollBudget,
       locRevPerPt, locRetailPct, locUtil, locCancelRate, locNoshowRate,
       kpis: [
         { name: 'Revenue', value: kpiFiltered ? kpiFiltered.rev : locRev, peerAvg: peerRev, goal: kpiFiltered ? null : (locRevBudget || null), format: 'dollar', higherBetter: true, trend: revTrend },
@@ -1821,18 +1845,21 @@ function LocationReport({ location, locations, metrics, dailyMetrics, opsData, b
                 const cancelNs = (rd.locCancelRate != null ? rd.locCancelRate : 0) + (rd.locNoshowRate != null ? rd.locNoshowRate : 0);
                 const cancelNsNull = rd.locCancelRate == null && rd.locNoshowRate == null;
 
+                const isMTD = reportPeriod === 'MTD';
                 const boxes = [
                   {
                     label: 'Sales',
                     value: rd.locRev != null ? `$${Math.round(rd.locRev).toLocaleString()}` : '--',
                     goal: rd.locRevBudget > 0 ? `Goal $${Math.round(rd.locRevBudget).toLocaleString()}` : null,
                     above: rd.locRevBudget > 0 ? rd.locRev >= rd.locRevBudget : null,
+                    fullMonthGoal: isMTD && rd.fullMonthRevBudget > 0 ? `Total Month $${Math.round(rd.fullMonthRevBudget).toLocaleString()}` : null,
                   },
                   {
                     label: 'Collections',
                     value: rd.locColl != null ? `$${Math.round(rd.locColl).toLocaleString()}` : '--',
                     goal: rd.locCollBudget > 0 ? `Goal $${Math.round(rd.locCollBudget).toLocaleString()}` : null,
                     above: rd.locCollBudget > 0 ? rd.locColl >= rd.locCollBudget : null,
+                    fullMonthGoal: isMTD && rd.fullMonthCollBudget > 0 ? `Total Month $${Math.round(rd.fullMonthCollBudget).toLocaleString()}` : null,
                   },
                   {
                     label: 'Rev / Patient',
@@ -1877,6 +1904,14 @@ function LocationReport({ location, locations, metrics, dailyMetrics, opsData, b
                         color: box.above == null ? 'rgba(255,255,255,0.45)' : box.above ? '#4CAF50' : '#EF5350',
                       }}>
                         {box.goal}
+                      </div>
+                    )}
+                    {box.fullMonthGoal && (
+                      <div style={{
+                        fontSize: 9, fontFamily: FONT.body, fontWeight: 600,
+                        color: V.gold,
+                      }}>
+                        {box.fullMonthGoal}
                       </div>
                     )}
                   </div>
