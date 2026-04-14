@@ -1,0 +1,119 @@
+name: Stale Data Alert
+
+on:
+  schedule:
+    # Run at 10am EST (3pm UTC) Mon-Fri — 2 hours after the scheduled refresh
+    - cron: '0 15 * * 1-5'
+  workflow_dispatch: {}
+
+jobs:
+  check-freshness:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check data freshness
+        id: check
+        run: |
+          # Get the most recent week in weekly-metrics.json
+          LATEST_WEEK=$(node -e "
+            const d = JSON.parse(require('fs').readFileSync('public/data/performance/weekly-metrics.json','utf8'));
+            const weeks = [...new Set(d.map(r=>r.w))].sort();
+            console.log(weeks[weeks.length-1]);
+          ")
+
+          # Get the most recent day in daily-metrics.json
+          LATEST_DAY=$(node -e "
+            const d = JSON.parse(require('fs').readFileSync('public/data/performance/daily-metrics.json','utf8'));
+            const days = [...new Set(d.map(r=>r.d))].sort();
+            console.log(days[days.length-1]);
+          ")
+
+          # Calculate staleness
+          TODAY=$(date -u +%Y-%m-%d)
+          DAYS_STALE=$(( ($(date -d "$TODAY" +%s) - $(date -d "$LATEST_DAY" +%s)) / 86400 ))
+
+          echo "latest_week=$LATEST_WEEK" >> "$GITHUB_OUTPUT"
+          echo "latest_day=$LATEST_DAY" >> "$GITHUB_OUTPUT"
+          echo "days_stale=$DAYS_STALE" >> "$GITHUB_OUTPUT"
+          echo "today=$TODAY" >> "$GITHUB_OUTPUT"
+
+          echo "Latest weekly data: $LATEST_WEEK"
+          echo "Latest daily data: $LATEST_DAY"
+          echo "Days stale: $DAYS_STALE"
+
+          if [ "$DAYS_STALE" -gt 2 ]; then
+            echo "stale=true" >> "$GITHUB_OUTPUT"
+            echo "::warning::Performance tracker data is $DAYS_STALE days stale (latest: $LATEST_DAY)"
+          else
+            echo "stale=false" >> "$GITHUB_OUTPUT"
+            echo "Data is fresh (latest: $LATEST_DAY)"
+          fi
+
+      - name: Create issue if stale
+        if: steps.check.outputs.stale == 'true'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const title = `Performance tracker data stale — last updated ${context.payload.workflow_run?.head_commit?.timestamp || '${{ steps.check.outputs.latest_day }}'}`;
+            const daysStale = '${{ steps.check.outputs.days_stale }}';
+            const latestDay = '${{ steps.check.outputs.latest_day }}';
+            const latestWeek = '${{ steps.check.outputs.latest_week }}';
+            const today = '${{ steps.check.outputs.today }}';
+
+            // Check for existing open stale-data issues to avoid duplicates
+            const { data: issues } = await github.rest.issues.listForRepo({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              state: 'open',
+              labels: 'stale-data',
+              per_page: 5
+            });
+
+            if (issues.length > 0) {
+              // Add a comment to existing issue instead of creating a new one
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: issues[0].number,
+                body: `Still stale as of ${today}. Daily data last updated: ${latestDay} (${daysStale} days ago). Weekly data: ${latestWeek}.`
+              });
+              console.log(`Updated existing issue #${issues[0].number}`);
+            } else {
+              await github.rest.issues.create({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                title: `Performance tracker data is ${daysStale} days stale`,
+                body: `## Stale Data Alert\n\n| Metric | Value |\n|--------|-------|\n| Today | ${today} |\n| Latest daily data | ${latestDay} |\n| Latest weekly data | ${latestWeek} |\n| Days stale | ${daysStale} |\n\nThe scheduled task \`performance-tracker-daily-refresh\` may have stopped running. Check Claude Code scheduled tasks.\n\n### Manual refresh steps\n1. Open Claude Code in the performance-tracker repo\n2. Ask: "refresh performance tracker data through yesterday"\n3. Or re-enable the scheduled task if it's disabled`,
+                labels: ['stale-data']
+              });
+              console.log('Created new stale-data issue');
+            }
+
+      - name: Close stale issue if fresh
+        if: steps.check.outputs.stale == 'false'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const { data: issues } = await github.rest.issues.listForRepo({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              state: 'open',
+              labels: 'stale-data',
+              per_page: 5
+            });
+            for (const issue of issues) {
+              await github.rest.issues.update({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: issue.number,
+                state: 'closed',
+                state_reason: 'completed'
+              });
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: issue.number,
+                body: `Data is now fresh (latest: ${{ steps.check.outputs.latest_day }}). Auto-closing.`
+              });
+            }
