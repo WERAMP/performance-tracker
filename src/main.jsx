@@ -73,7 +73,7 @@ function Hub() {
     <PageWrapper label="Analytics & Reporting" title="Performance Tracker" description="Detailed weekly and monthly performance metrics across all AMP locations." backLink="https://ampintelligence.ai" backText="Back to AMP Intelligence Hub">
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: 16 }}>
         <Card href="/org" icon="📊" title="Org Performance Tracker" description="All locations with full interactive filters — revenue, collections, provider productivity, service mix, and ops KPIs." count={66} />
-        <Card href="/by-type" icon="🏷️" title="By Location Type" description="Performance tracker pre-filtered by location type (Sparrow, Sparrow-vF, Avelure-MO, Base, etc.)" count={13} />
+        <Card href="/by-type" icon="🏷️" title="By Location Type" description="Performance tracker pre-filtered by location type — includes Pod Leaders, Sparrow, Avelure, and more." count={18} />
         <Card href="/by-practice" icon="🏢" title="By Practice" description="Performance tracker pre-filtered by practice (Avelure, Ever/Body, Destination Aesthetics, etc.)" count={19} />
         <Card href="/by-location" icon="📍" title="By Location" description="Performance tracker pre-filtered to a single location for detailed analysis and provider reports." count={66} />
       </div>
