@@ -1240,8 +1240,7 @@ function LocationReport({ location, locations, metrics, dailyMetrics, opsData, b
       const rt = mpRows.reduce((s, r) => s + (Number(r.rt) || 0), 0);
       const inj = mpRows.reduce((s, r) => s + (Number(r.inj) || 0), 0);
       const coll = rcpRows.reduce((s, r) => s + (Number(r.coll) || 0), 0);
-      const cn = opsRows.reduce((s, r) => s + (Number(r.cn) || 0), 0);
-      const ns = opsRows.reduce((s, r) => s + (Number(r.ns) || 0), 0);
+      // cn/ns are percentage rates — compute weighted average by appointment count (t)
       const t = opsRows.reduce((s, r) => s + (Number(r.t) || 0), 0);
       const totalH = uhRows.reduce((s, r) => s + (Number(r.h) || 0), 0);
       const nonZeroUtil = uhRows.filter(r => Number(r.ur) > 0);
@@ -1260,8 +1259,8 @@ function LocationReport({ location, locations, metrics, dailyMetrics, opsData, b
         retailPct: rev > 0 ? (rt / rev) * 100 : null,
         injPct: rev > 0 ? (inj / rev) * 100 : null,
         collPct: rev > 0 ? (coll / rev) * 100 : null,
-        cancelRate: t > 0 ? (cn / t) * 100 : null,
-        noshowRate: t > 0 ? (ns / t) * 100 : null,
+        cancelRate: t > 0 ? opsRows.reduce((s, r) => s + (Number(r.cn) || 0) * (Number(r.t) || 0), 0) / t : null,
+        noshowRate: t > 0 ? opsRows.reduce((s, r) => s + (Number(r.ns) || 0) * (Number(r.t) || 0), 0) / t : null,
         util: utilAvg,
         avgPt: pt / numWeeks,
         avgBtxUnits,

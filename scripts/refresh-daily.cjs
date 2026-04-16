@@ -79,8 +79,9 @@ replaceWeek('weekly-metrics.json', metricsRows);
 
 // ── 2. WEEKLY-OPS ─────────────────────────────────────────────────────────────
 const q3Data = readInput('q3.json');
+// cn/ns are percentage rates from dataset 754, t is appointment group count
 const opsRows = q3Data.filter(r => knownCenters.has(r.c))
-  .map(r => ({ w: W, c: r.c, cn: fc(r.cn), ns: fc(r.ns), t: fc(r.t) }));
+  .map(r => ({ w: W, c: r.c, cn: ff(r.cn), ns: ff(r.ns), t: fc(r.t) }));
 replaceWeek('weekly-ops.json', opsRows);
 
 // ── 3. WEEKLY-NTX-FILLER ──────────────────────────────────────────────────────
@@ -181,9 +182,10 @@ replaceWeek('weekly-syringe-provider.json', syrProvRows);
 
 // ── 12. WEEKLY-OPS-PROVIDER ──────────────────────────────────────────────────
 const q14Data = readInput('q14.json');
+// cn/ns are percentage rates from dataset 754
 const opsProvRows = q14Data
   .filter(r => knownCenters.has(r.c) && r.pr != null && r.w === W)
-  .map(r => ({ w: W, c: r.c, pr: r.pr, cn: fc(r.cn), ns: fc(r.ns), t: fc(r.t) }));
+  .map(r => ({ w: W, c: r.c, pr: r.pr, cn: ff(r.cn), ns: ff(r.ns), t: fc(r.t) }));
 replaceWeek('weekly-ops-provider.json', opsProvRows);
 
 // ── 13. WEEKLY-UTIL-HOURS-PROVIDER ───────────────────────────────────────────
