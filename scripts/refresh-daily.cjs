@@ -53,10 +53,11 @@ function replaceWeek(file, newRows) {
   console.log(`${file}: ${existing.filter(r => r.w === W).length} removed, ${newRows.length} added -> total=${merged.length}, latest=${weeks[weeks.length - 1]}`);
 }
 
-// ── Determine W from q1 data ──────────────────────────────────────────────────
+// ── Determine W from q1 data (falls back to q3 on early Monday when no sales yet) ──
 const q1Data = readInput('q1.json');
-const W = q1Data[0].w;
-console.log(`W = ${W}`);
+const _q3Early = readInput('q3.json');
+const W = q1Data.length > 0 ? q1Data[0].w : _q3Early[0].w;
+console.log(`W = ${W} (derived from ${q1Data.length > 0 ? 'q1' : 'q3 — early Monday, no sales yet'})`);
 
 const locations = JSON.parse(fs.readFileSync(path.join(BASE, 'locations.json'), 'utf8'));
 const knownCenters = new Set(locations.map(l => l.name));
@@ -78,7 +79,7 @@ const metricsRows = q1Data
 replaceWeek('weekly-metrics.json', metricsRows);
 
 // ── 2. WEEKLY-OPS ─────────────────────────────────────────────────────────────
-const q3Data = readInput('q3.json');
+const q3Data = _q3Early;
 // cn/ns are percentage rates from dataset 754, t is appointment group count
 const opsRows = q3Data.filter(r => knownCenters.has(r.c))
   .map(r => ({ w: W, c: r.c, cn: ff(r.cn), ns: ff(r.ns), t: fc(r.t) }));
