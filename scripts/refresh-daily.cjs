@@ -94,7 +94,12 @@ replaceWeek('weekly-ntx-filler.json', ntxRows);
 // ── 4. WEEKLY-BTX-PROVIDER + WEEKLY-BTX ──────────────────────────────────────
 const q5Data = readInput('q5.json');
 const btxProvRows = q5Data.filter(r => knownCenters.has(r.c) && r.pr != null)
-  .map(r => ({ w: W, c: r.c, pr: r.pr, n: fc(r.n), total_qty: ff(r.total_qty) }));
+  .map(r => {
+    const n = fc(r.n);
+    const total_qty = ff(r.total_qty);
+    const b = n > 0 ? Math.round((total_qty / n) * 100) / 100 : null;
+    return { w: W, c: r.c, pr: r.pr, b, n, total_qty };
+  });
 replaceWeek('weekly-btx-provider.json', btxProvRows);
 const btxMap = {};
 for (const r of btxProvRows) {
@@ -102,11 +107,15 @@ for (const r of btxProvRows) {
   btxMap[r.c].sumQty += r.total_qty || 0;
   btxMap[r.c].sumN += r.n || 0;
 }
-const btxRows = Object.entries(btxMap).map(([c, v]) => ({
-  w: W, c,
-  avg_units: v.sumN > 0 ? Math.round((v.sumQty / v.sumN) * 100) / 100 : null,
-  total_qty: Math.round(v.sumQty * 100) / 100
-}));
+const btxRows = Object.entries(btxMap).map(([c, v]) => {
+  const avg_units = v.sumN > 0 ? Math.round((v.sumQty / v.sumN) * 100) / 100 : null;
+  return {
+    w: W, c,
+    b: avg_units,
+    avg_units,
+    total_qty: Math.round(v.sumQty * 100) / 100
+  };
+});
 replaceWeek('weekly-btx.json', btxRows);
 
 // ── 5. WEEKLY-SYRINGE-LOC ─────────────────────────────────────────────────────
@@ -126,9 +135,11 @@ const schedRows = q7Data.filter(r => knownCenters.has(r.c)).map(r => ({
 replaceWeek('weekly-provider-hours.json', schedRows);
 const revByLoc = {};
 for (const r of metricsRows) revByLoc[r.c] = r.s;
-const utilRows = schedRows.filter(r => r.h > 0).map(r => ({
-  w: W, c: r.c, ur: Math.round((revByLoc[r.c] || 0) / r.h / 5 * 100) / 100
-}));
+const utilRows = schedRows.filter(r => r.h > 0)
+  .map(r => ({
+    w: W, c: r.c, ur: Math.round((revByLoc[r.c] || 0) / r.h / 5 * 100) / 100
+  }))
+  .filter(r => r.ur > 0);
 replaceWeek('weekly-utilization.json', utilRows);
 
 // ── 7. DAILY-METRICS (7-day lookback) ────────────────────────────────────────
