@@ -30,7 +30,8 @@ const DIST = path.join(__dirname, '..', 'dist', 'data', 'performance');
 function readInput(f) {
   const p = path.join(__dirname, f);
   if (!fs.existsSync(p)) throw new Error(`Missing input file: ${f} — run all SQL queries first`);
-  return JSON.parse(fs.readFileSync(p, 'utf8'));
+  // Strip UTF-8 BOM if present (e.g. files saved by PowerShell Set-Content)
+  return JSON.parse(fs.readFileSync(p, 'utf8').replace(/^\uFEFF/, ''));
 }
 function readJson(f) { return JSON.parse(fs.readFileSync(path.join(BASE, f), 'utf8')); }
 function writeJson(f, data) {
