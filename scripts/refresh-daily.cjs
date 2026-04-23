@@ -16,7 +16,8 @@
 //   q12.json — Q12 collections by provider (use_dataset(1237) NOT flat_file)
 //   q13.json — Q13 syringe by provider
 //   q14.json — Q14 ops by provider
-//   q15.json — Q15 provider hours
+//   q16.json — Q16 location-level service hours + net scheduled hours (utilization)
+//   q17.json — Q17 provider-level service hours + net scheduled hours (utilization)
 //
 // NOTE: No q2.json — weekly co is derived from q9 daily data for accuracy.
 
@@ -133,13 +134,13 @@ const schedRows = q7Data.filter(r => knownCenters.has(r.c)).map(r => ({
   bh: Math.round(parseFloat(r.bh) * 10) / 10
 }));
 replaceWeek('weekly-provider-hours.json', schedRows);
-const revByLoc = {};
-for (const r of metricsRows) revByLoc[r.c] = r.s;
-const utilRows = schedRows.filter(r => r.h > 0)
-  .map(r => ({
-    w: W, c: r.c, ur: Math.round((revByLoc[r.c] || 0) / r.h / 5 * 100) / 100
-  }))
-  .filter(r => r.ur > 0);
+const q16Data = readInput('q16.json');
+const utilRows = q16Data.filter(r => knownCenters.has(r.c)).map(r => {
+  const nh = parseFloat(r.nh) || 0;
+  const sh = parseFloat(r.sh) || 0;
+  const ur = nh > 0 ? Math.round((sh / nh) * 100 * 100) / 100 : 0;
+  return { w: W, c: r.c, ur };
+}).filter(r => r.ur > 0);
 replaceWeek('weekly-utilization.json', utilRows);
 
 // ── 7. DAILY-METRICS (7-day lookback) ────────────────────────────────────────
@@ -201,15 +202,13 @@ const opsProvRows = q14Data
 replaceWeek('weekly-ops-provider.json', opsProvRows);
 
 // ── 13. WEEKLY-UTIL-HOURS-PROVIDER ───────────────────────────────────────────
-const q15Data = readInput('q15.json');
-const provRevMap = {};
-for (const r of metricsProvRows) provRevMap[r.c + '|' + r.pr] = r.s;
-const utilProvRows = q15Data.filter(r => knownCenters.has(r.c) && r.pr != null).map(r => {
-  const h = parseFloat(r.h) || 0;
-  const rev = provRevMap[r.c + '|' + r.pr] || 0;
-  const ur = h > 0 ? Math.round((rev / h / 500) * 100 * 100) / 100 : 0;
-  return { w: W, c: r.c, pr: r.pr, h: ff(r.h), sh: ff(r.sh), bh: ff(r.bh), ur };
-});
+const q17Data = readInput('q17.json');
+const utilProvRows = q17Data.filter(r => knownCenters.has(r.c) && r.pr != null).map(r => {
+  const nh = parseFloat(r.nh) || 0;
+  const sh = parseFloat(r.sh) || 0;
+  const ur = nh > 0 ? Math.round((sh / nh) * 100 * 100) / 100 : 0;
+  return { w: W, c: r.c, pr: r.pr, h: ff(r.nh), sh: ff(r.sh), ur };
+}).filter(r => r.h > 0);
 replaceWeek('weekly-util-hours-provider.json', utilProvRows);
 
 console.log('\n=== Done ===');
