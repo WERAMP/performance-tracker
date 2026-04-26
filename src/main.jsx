@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react'
 import ReactDOM from 'react-dom/client'
 import { BrowserRouter, Routes, Route, useParams, useNavigate } from 'react-router-dom'
 import PerformanceTracker from './components/PerformanceTracker'
+import PMReport from './components/PMReport'
 
 // ── Design tokens ──
 const V = { navy: '#041E42', gold: '#B9975B', cream: '#FAF8F7', taupe: '#E4D5D3', gray: '#948794', white: '#FFFFFF', dark: '#2a1f28' };
@@ -250,6 +251,9 @@ ReactDOM.createRoot(document.getElementById('root')).render(
         {/* By Location */}
         <Route path="/by-location" element={<ByLocationListing />} />
         <Route path="/by-location/:location" element={<TrackerByLocation />} />
+
+        {/* PM Hours-Reduction Report (DRAFT) */}
+        <Route path="/pm-report/:location" element={<PMReport />} />
       </Routes>
     </BrowserRouter>
     </ErrorBoundary>
