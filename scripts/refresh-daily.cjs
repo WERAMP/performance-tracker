@@ -27,11 +27,17 @@ const path = require('path');
 const BASE = path.join(__dirname, '..', 'public', 'data', 'performance');
 const DIST = path.join(__dirname, '..', 'dist', 'data', 'performance');
 
+// CorralData occasionally renames centers. Map old/alternate names → canonical tracker name.
+const CENTER_ALIASES = {
+  'Ever/Body-Greenwich Village': 'Ever/Body-Greenwich',
+};
+
 function readInput(f) {
   const p = path.join(__dirname, f);
   if (!fs.existsSync(p)) throw new Error(`Missing input file: ${f} — run all SQL queries first`);
   // Strip UTF-8 BOM if present (e.g. files saved by PowerShell Set-Content)
-  return JSON.parse(fs.readFileSync(p, 'utf8').replace(/^\uFEFF/, ''));
+  const data = JSON.parse(fs.readFileSync(p, 'utf8').replace(/^\uFEFF/, ''));
+  return data.map(r => r.c && CENTER_ALIASES[r.c] ? { ...r, c: CENTER_ALIASES[r.c] } : r);
 }
 function readJson(f) { return JSON.parse(fs.readFileSync(path.join(BASE, f), 'utf8')); }
 function writeJson(f, data) {
