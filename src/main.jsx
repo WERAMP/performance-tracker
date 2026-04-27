@@ -90,7 +90,7 @@ function ByTypeListing() {
   const [locCounts, setLocCounts] = useState({});
 
   useEffect(() => {
-    fetch('/data/performance/locations.json').then(r => r.json()).then(locs => {
+    fetch(import.meta.env.BASE_URL + 'data/performance/locations.json').then(r => r.json()).then(locs => {
       const typeSet = {};
       locs.forEach(l => (l.types || []).forEach(t => {
         if (!typeSet[t]) typeSet[t] = 0;
@@ -120,7 +120,7 @@ function ByPracticeListing() {
   const [locCounts, setLocCounts] = useState({});
 
   useEffect(() => {
-    fetch('/data/performance/locations.json').then(r => r.json()).then(locs => {
+    fetch(import.meta.env.BASE_URL + 'data/performance/locations.json').then(r => r.json()).then(locs => {
       const practiceSet = {};
       locs.forEach(l => {
         const p = l.practice || 'Unknown';
@@ -150,7 +150,7 @@ function ByLocationListing() {
   const [search, setSearch] = useState('');
 
   useEffect(() => {
-    fetch('/data/performance/locations.json').then(r => r.json()).then(setLocs);
+    fetch(import.meta.env.BASE_URL + 'data/performance/locations.json').then(r => r.json()).then(setLocs);
   }, []);
 
   const filtered = search

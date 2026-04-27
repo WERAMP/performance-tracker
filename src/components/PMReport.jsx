@@ -101,11 +101,11 @@ export default function PMReport() {
 
   useEffect(() => {
     Promise.all([
-      fetch('/data/performance/weekly-rev-coll-provider.json').then(r => r.json()),
-      fetch('/data/performance/weekly-util-hours-provider.json').then(r => r.json()),
-      fetch('/data/performance/weekly-metrics.json').then(r => r.json()),
-      fetch('/data/performance/weekly-utilization.json').then(r => r.json()),
-      fetch('/data/performance/weekly-provider-hours.json').then(r => r.json()),
+      fetch(import.meta.env.BASE_URL + 'data/performance/weekly-rev-coll-provider.json').then(r => r.json()),
+      fetch(import.meta.env.BASE_URL + 'data/performance/weekly-util-hours-provider.json').then(r => r.json()),
+      fetch(import.meta.env.BASE_URL + 'data/performance/weekly-metrics.json').then(r => r.json()),
+      fetch(import.meta.env.BASE_URL + 'data/performance/weekly-utilization.json').then(r => r.json()),
+      fetch(import.meta.env.BASE_URL + 'data/performance/weekly-provider-hours.json').then(r => r.json()),
     ]).then(([revColl, utilH, metrics, utilLoc, provHrs]) => setData({ revColl, utilH, metrics, utilLoc, provHrs }));
   }, []);
 
