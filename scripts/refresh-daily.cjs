@@ -61,6 +61,89 @@ function replaceWeek(file, newRows) {
   console.log(`${file}: ${existing.filter(r => r.w === W).length} removed, ${newRows.length} added -> total=${merged.length}, latest=${weeks[weeks.length - 1]}`);
 }
 
+// ── Input validation guard ──────────────────────────────────────────────────
+// Aborts if any q{N}.json is missing, stale (mtime < today), unparseable, or
+// unexpectedly empty. Prevents the silent stale-data ships we saw before
+// 2026-04-28 (e.g. q12 not refreshed for days, q14 carried over from yesterday).
+const REQUIRED_INPUTS = [
+  { f: 'q1.json',  allowEmpty: true,  desc: 'Weekly revenue (early Monday may legitimately be empty)' },
+  { f: 'q3.json',  allowEmpty: false, desc: 'Weekly ops by center' },
+  { f: 'q4.json',  allowEmpty: false, desc: 'Weekly NTX/filler by center' },
+  { f: 'q5.json',  allowEmpty: true,  desc: 'Botox by provider (raw flat_file — known to lag, allowed empty)' },
+  { f: 'q6.json',  allowEmpty: true,  desc: 'Syringe by location (raw flat_file — known to lag, allowed empty)' },
+  { f: 'q7.json',  allowEmpty: false, desc: 'Provider hours by location' },
+  { f: 'q8.json',  allowEmpty: false, desc: 'Daily revenue (7-day lookback)' },
+  { f: 'q9.json',  allowEmpty: false, desc: 'Daily collections (7-day lookback)' },
+  { f: 'q10.json', allowEmpty: false, desc: 'Provider weekly metrics' },
+  { f: 'q11.json', allowEmpty: false, desc: 'Provider injectable revenue' },
+  { f: 'q12.json', allowEmpty: false, desc: 'Provider collections (dataset 1237 — must have data)' },
+  { f: 'q13.json', allowEmpty: true,  desc: 'Provider syringe (raw flat_file — known to lag, allowed empty)' },
+  { f: 'q14.json', allowEmpty: false, desc: 'Provider ops rates (dataset 754 — must have data)' },
+  { f: 'q16.json', allowEmpty: false, desc: 'Location utilization' },
+  { f: 'q17.json', allowEmpty: false, desc: 'Provider utilization' },
+];
+
+(function validateInputs() {
+  const startOfToday = new Date();
+  startOfToday.setHours(0, 0, 0, 0);
+
+  const errors = [];
+  const warnings = [];
+  const summary = [];
+
+  for (const { f, allowEmpty, desc } of REQUIRED_INPUTS) {
+    const p = path.join(__dirname, f);
+    if (!fs.existsSync(p)) {
+      errors.push(`MISSING  ${f} — query was not run (${desc})`);
+      continue;
+    }
+    const stat = fs.statSync(p);
+    if (stat.mtime < startOfToday) {
+      errors.push(`STALE    ${f} — last modified ${stat.mtime.toISOString()} (${desc})`);
+      continue;
+    }
+    let data;
+    try {
+      data = JSON.parse(fs.readFileSync(p, 'utf8').replace(/^\uFEFF/, ''));
+    } catch (e) {
+      errors.push(`PARSE    ${f} — ${e.message}`);
+      continue;
+    }
+    if (!Array.isArray(data)) {
+      errors.push(`SHAPE    ${f} — expected JSON array (${desc})`);
+      continue;
+    }
+    if (data.length === 0) {
+      if (allowEmpty) {
+        warnings.push(`empty    ${f} — ${desc}`);
+      } else {
+        errors.push(`EMPTY    ${f} — query returned 0 rows but data is expected (${desc})`);
+      }
+      continue;
+    }
+    const ws = data.map(r => r.w).filter(Boolean).sort();
+    const ds = data.map(r => r.d).filter(Boolean).sort();
+    const latest = ws.length ? ws[ws.length - 1] : (ds.length ? ds[ds.length - 1] : '?');
+    summary.push(`ok       ${f}  rows=${data.length}  latest=${latest}`);
+  }
+
+  console.log('--- input validation ---');
+  for (const s of summary) console.log(s);
+  for (const w of warnings) console.warn(w);
+
+  if (errors.length) {
+    console.error('\n=== INPUT VALIDATION FAILED ===');
+    for (const e of errors) console.error(e);
+    console.error(`\n${errors.length} of ${REQUIRED_INPUTS.length} input files are missing, stale, or unexpectedly empty.`);
+    console.error('ABORTED to prevent shipping incomplete data.');
+    console.error('Action: re-run the failed queries, save the results, and run this script again.');
+    console.error('Do NOT build/commit/push until all required inputs are fresh.\n');
+    process.exit(1);
+  }
+
+  console.log(`ok       all ${REQUIRED_INPUTS.length} inputs validated\n`);
+})();
+
 // ── Determine W from q1 data (falls back to q3 on early Monday when no sales yet) ──
 const q1Data = readInput('q1.json');
 const _q3Early = readInput('q3.json');
