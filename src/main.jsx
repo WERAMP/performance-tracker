@@ -3,6 +3,9 @@ import ReactDOM from 'react-dom/client'
 import { BrowserRouter, Routes, Route, useParams, useNavigate } from 'react-router-dom'
 import PerformanceTracker from './components/PerformanceTracker'
 
+// Base path prefix — '/tracker' in production, '' in dev (when BASE_URL is '/')
+const BP = import.meta.env.BASE_URL.replace(/\/$/, '');
+
 // ── Design tokens ──
 const V = { navy: '#041E42', gold: '#B9975B', cream: '#FAF8F7', taupe: '#E4D5D3', gray: '#948794', white: '#FFFFFF', dark: '#2a1f28' };
 const FONT = { heading: "'GFS Didot', Didot, Georgia, serif", body: "'Nunito Sans', 'Avenir Next', Avenir, sans-serif" };
@@ -12,7 +15,7 @@ function NavBar({ subtitle }) {
   return (
     <div style={{ background: V.navy, padding: '20px 32px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
-        <a href="/" style={{ textDecoration: 'none' }}>
+        <a href={`${BP}/`} style={{ textDecoration: 'none' }}>
           <span style={{ fontFamily: FONT.heading, fontSize: 16, color: V.gold, letterSpacing: 6 }}>A M P</span>
         </a>
         <span style={{ color: 'rgba(255,255,255,0.2)', fontSize: 20 }}>|</span>
@@ -35,7 +38,7 @@ function PageWrapper({ label, title, description, children, backLink, backText }
         <div style={{ width: 40, height: 3, background: V.gold, borderRadius: 2, marginBottom: 40 }} />
         {children}
         <div style={{ marginTop: 32, padding: '16px 20px', background: V.white, borderRadius: 12, border: `1px solid ${V.taupe}`, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <span style={{ fontSize: 12, color: V.gray }}>← <a href={backLink || '/'} style={{ color: V.navy, textDecoration: 'none', fontWeight: 600 }}>{backText || 'Back to Performance Tracker Hub'}</a></span>
+          <span style={{ fontSize: 12, color: V.gray }}>← <a href={backLink || `${BP}/`} style={{ color: V.navy, textDecoration: 'none', fontWeight: 600 }}>{backText || 'Back to Performance Tracker Hub'}</a></span>
           <span style={{ fontSize: 11, color: V.gray }}>Data sourced from CorralData</span>
         </div>
       </div>
@@ -72,10 +75,10 @@ function Hub() {
   return (
     <PageWrapper label="Analytics & Reporting" title="Performance Tracker" description="Detailed weekly and monthly performance metrics across all AMP locations." backLink="https://ampintelligence.ai" backText="Back to AMP Intelligence Hub">
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: 16 }}>
-        <Card href="/org" icon="📊" title="Org Performance Tracker" description="All locations with full interactive filters — revenue, collections, provider productivity, service mix, and ops KPIs." count={66} />
-        <Card href="/by-type" icon="🏷️" title="By Location Type" description="Performance tracker pre-filtered by location type — includes Pod Leaders, Sparrow, Avelure, and more." count={18} />
-        <Card href="/by-practice" icon="🏢" title="By Practice" description="Performance tracker pre-filtered by practice (Avelure, Ever/Body, Destination Aesthetics, etc.)" count={19} />
-        <Card href="/by-location" icon="📍" title="By Location" description="Performance tracker pre-filtered to a single location for detailed analysis and provider reports." count={66} />
+        <Card href={`${BP}/org`} icon="📊" title="Org Performance Tracker" description="All locations with full interactive filters — revenue, collections, provider productivity, service mix, and ops KPIs." count={66} />
+        <Card href={`${BP}/by-type`} icon="🏷️" title="By Location Type" description="Performance tracker pre-filtered by location type — includes Pod Leaders, Sparrow, Avelure, and more." count={18} />
+        <Card href={`${BP}/by-practice`} icon="🏢" title="By Practice" description="Performance tracker pre-filtered by practice (Avelure, Ever/Body, Destination Aesthetics, etc.)" count={19} />
+        <Card href={`${BP}/by-location`} icon="📍" title="By Location" description="Performance tracker pre-filtered to a single location for detailed analysis and provider reports." count={66} />
       </div>
     </PageWrapper>
   );
@@ -89,7 +92,7 @@ function ByTypeListing() {
   const [locCounts, setLocCounts] = useState({});
 
   useEffect(() => {
-    fetch('/data/performance/locations.json').then(r => r.json()).then(locs => {
+    fetch(`${BP}/data/performance/locations.json`).then(r => r.json()).then(locs => {
       const typeSet = {};
       locs.forEach(l => (l.types || []).forEach(t => {
         if (!typeSet[t]) typeSet[t] = 0;
@@ -104,7 +107,7 @@ function ByTypeListing() {
     <PageWrapper label="By Location Type" title="Select a Location Type" description="Choose a location type to view its pre-filtered performance tracker.">
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(250px, 1fr))', gap: 14 }}>
         {types.map(t => (
-          <Card key={t} href={`/by-type/${encodeURIComponent(t)}`} title={t} count={locCounts[t]} />
+          <Card key={t} href={`${BP}/by-type/${encodeURIComponent(t)}`} title={t} count={locCounts[t]} />
         ))}
       </div>
     </PageWrapper>
@@ -119,7 +122,7 @@ function ByPracticeListing() {
   const [locCounts, setLocCounts] = useState({});
 
   useEffect(() => {
-    fetch('/data/performance/locations.json').then(r => r.json()).then(locs => {
+    fetch(`${BP}/data/performance/locations.json`).then(r => r.json()).then(locs => {
       const practiceSet = {};
       locs.forEach(l => {
         const p = l.practice || 'Unknown';
@@ -134,7 +137,7 @@ function ByPracticeListing() {
     <PageWrapper label="By Practice" title="Select a Practice" description="Choose a practice to view its pre-filtered performance tracker.">
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(250px, 1fr))', gap: 14 }}>
         {practices.map(p => (
-          <Card key={p} href={`/by-practice/${encodeURIComponent(p)}`} title={p} count={locCounts[p]} />
+          <Card key={p} href={`${BP}/by-practice/${encodeURIComponent(p)}`} title={p} count={locCounts[p]} />
         ))}
       </div>
     </PageWrapper>
@@ -149,7 +152,7 @@ function ByLocationListing() {
   const [search, setSearch] = useState('');
 
   useEffect(() => {
-    fetch('/data/performance/locations.json').then(r => r.json()).then(setLocs);
+    fetch(`${BP}/data/performance/locations.json`).then(r => r.json()).then(setLocs);
   }, []);
 
   const filtered = search
@@ -181,7 +184,7 @@ function ByLocationListing() {
           </div>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))', gap: 12 }}>
             {locations.sort((a, b) => a.name.localeCompare(b.name)).map(l => (
-              <Card key={l.name} href={`/by-location/${encodeURIComponent(l.name)}`} title={l.name} />
+              <Card key={l.name} href={`${BP}/by-location/${encodeURIComponent(l.name)}`} title={l.name} />
             ))}
           </div>
         </div>
@@ -231,7 +234,7 @@ class ErrorBoundary extends React.Component {
 ReactDOM.createRoot(document.getElementById('root')).render(
   <React.StrictMode>
     <ErrorBoundary>
-    <BrowserRouter>
+    <BrowserRouter basename={BP}>
       <Routes>
         {/* Hub */}
         <Route path="/" element={<Hub />} />
