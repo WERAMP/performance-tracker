@@ -69,7 +69,7 @@ const REQUIRED_INPUTS = [
   { f: 'q1.json',  allowEmpty: true,  desc: 'Weekly revenue (early Monday may legitimately be empty)' },
   { f: 'q3.json',  allowEmpty: false, desc: 'Weekly ops by center' },
   { f: 'q4.json',  allowEmpty: false, desc: 'Weekly NTX/filler by center' },
-  { f: 'q5.json',  allowEmpty: true,  desc: 'Botox by provider (raw flat_file — known to lag, allowed empty)' },
+  { f: 'q5.json',  allowEmpty: false, desc: 'Botox units by provider (dataset 1237 — must have data)' },
   { f: 'q6.json',  allowEmpty: true,  desc: 'Syringe by location (raw flat_file — known to lag, allowed empty)' },
   { f: 'q7.json',  allowEmpty: false, desc: 'Provider hours by location' },
   { f: 'q8.json',  allowEmpty: false, desc: 'Daily revenue (7-day lookback)' },
