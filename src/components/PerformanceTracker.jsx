@@ -888,7 +888,7 @@ function buildOpsChart(opsData, filteredNames, opsNameMap, valueKey) {
 //  Location Performance Report (collapsible, shown for single location)
 // ══════════════════════════════════════════════════════════════
 
-function LocationReport({ location, locations, metrics, dailyMetrics, opsData, btxData, syringeLocData, utilizationData, providerHoursData, injRevProviderData, btxProviderData, syringeProvData, revCollProvData, budgetData, metricsProviderData, opsProviderData, utilHoursProviderData }) {
+function LocationReport({ location, locations, metrics, dailyMetrics, opsData, btxData, syringeLocData, utilizationData, providerHoursData, injRevProviderData, btxProviderData, syringeProvData, revCollProvData, budgetData, metricsProviderData, opsProviderData, utilHoursProviderData, dailyInjRevProviderData, dailyRevCollProvData, dailyMetricsProviderData, dailyBtxProviderData, dailySyringeProvData }) {
   const [expandedSections, setExpandedSections] = useState({ kpi: false, efficiency: false, providers: false, recommendations: false });
   const toggleSection = (key) => setExpandedSections(prev => ({ ...prev, [key]: !prev[key] }));
   const [reportPeriod, setReportPeriod] = useState('MTD');
@@ -1277,12 +1277,17 @@ function LocationReport({ location, locations, metrics, dailyMetrics, opsData, b
 
     // Count distinct providers who have ANY data for this location in this period.
     // When the selected set covers all of them, fall back to the accurate daily-data totals.
+    // Daily-grain date predicate for the per-provider feeds. Use this in
+    // place of `periodSet.has(r.w)` so the Provider Performance cards return
+    // exact calendar windows for every filter (Yesterday, MTD, QTD, YTD,
+    // L30, L60) instead of the union of weeks that touch the window.
+    const inDateRange = (r) => r.d >= kpiFrom && r.d <= kpiTo;
     const _allProvForLoc = new Set([
-      ...(metricsProviderData  || []).filter(r => r.c === location && periodSet.has(r.w)).map(r => r.pr),
-      ...(btxProviderData      || []).filter(r => r.c === location && periodSet.has(r.w)).map(r => r.pr),
-      ...(syringeProvData      || []).filter(r => r.c === location && periodSet.has(r.w)).map(r => r.pr),
-      ...(revCollProvData      || []).filter(r => r.c === location && periodSet.has(r.w)).map(r => r.pr),
-      ...(injRevProviderData   || []).filter(r => r.c === location && periodSet.has(r.w)).map(r => r.pr),
+      ...(dailyMetricsProviderData  || []).filter(r => r.c === location && inDateRange(r)).map(r => r.pr),
+      ...(dailyBtxProviderData      || []).filter(r => r.c === location && inDateRange(r)).map(r => r.pr),
+      ...(dailySyringeProvData      || []).filter(r => r.c === location && inDateRange(r)).map(r => r.pr),
+      ...(dailyRevCollProvData      || []).filter(r => r.c === location && inDateRange(r)).map(r => r.pr),
+      ...(dailyInjRevProviderData   || []).filter(r => r.c === location && inDateRange(r)).map(r => r.pr),
     ].filter(Boolean));
 
     const kpiIsAllSelected = !kpiProviders || kpiProviders.size === 0 || kpiProviders.size >= _allProvForLoc.size;
@@ -1297,25 +1302,27 @@ function LocationReport({ location, locations, metrics, dailyMetrics, opsData, b
 
     // ── Section 3: Provider Performance ──
     const { cards: providerCards, allProviderNames } = (() => {
-      const provRows = (injRevProviderData || []).filter(r => r.c === location && periodSet.has(r.w));
+      // Switched to daily-grain feeds so the date-range filter resolves to
+      // exact calendar boundaries rather than whole-week buckets.
+      const provRows = (dailyInjRevProviderData || []).filter(r => r.c === location && inDateRange(r));
       // Union of all provider data sources so providers with only BTX / syringe / collections data are included
       const allProviderNamesSet = new Set([
         ...provRows.map(r => r.pr),
-        ...(btxProviderData || []).filter(r => r.c === location && periodSet.has(r.w)).map(r => r.pr),
-        ...(syringeProvData || []).filter(r => r.c === location && periodSet.has(r.w)).map(r => r.pr),
-        ...(revCollProvData || []).filter(r => r.c === location && periodSet.has(r.w)).map(r => r.pr),
+        ...(dailyBtxProviderData || []).filter(r => r.c === location && inDateRange(r)).map(r => r.pr),
+        ...(dailySyringeProvData || []).filter(r => r.c === location && inDateRange(r)).map(r => r.pr),
+        ...(dailyRevCollProvData || []).filter(r => r.c === location && inDateRange(r)).map(r => r.pr),
       ].filter(Boolean));
       const providerNames = [...allProviderNamesSet];
       if (!providerNames.length) return { cards: [], allProviderNames: [] };
 
       // Peer averages for provider-level metrics
-      const peerInjRevRows = injRevProviderData.filter(r => peers.includes(r.c) && periodSet.has(r.w));
+      const peerInjRevRows = (dailyInjRevProviderData || []).filter(r => peers.includes(r.c) && inDateRange(r));
       const allPeerProviders = [...new Set(peerInjRevRows.map(r => r.pr))];
       const peerAvgInjRev = allPeerProviders.length > 0
         ? allPeerProviders.map(pr => peerInjRevRows.filter(r => r.pr === pr).reduce((s, r) => s + (Number(r.r) || 0), 0)).reduce((s, v) => s + v, 0) / allPeerProviders.length
         : null;
 
-      const peerBtxRows = (btxProviderData || []).filter(r => peers.includes(r.c) && periodSet.has(r.w) && (Number(r.total_qty) || 0) > 0);
+      const peerBtxRows = (dailyBtxProviderData || []).filter(r => peers.includes(r.c) && inDateRange(r) && (Number(r.total_qty) || 0) > 0);
       const peerBtxProviders = [...new Set(peerBtxRows.map(r => r.pr))];
       const peerAvgBtx = peerBtxProviders.length > 0
         ? (() => {
@@ -1325,7 +1332,7 @@ function LocationReport({ location, locations, metrics, dailyMetrics, opsData, b
         })()
         : null;
 
-      const peerSyrRows = (syringeProvData || []).filter(r => peers.includes(r.c) && periodSet.has(r.w));
+      const peerSyrRows = (dailySyringeProvData || []).filter(r => peers.includes(r.c) && inDateRange(r));
       const peerSyrProviders = [...new Set(peerSyrRows.map(r => r.pr))];
       const peerAvgSyrInj = peerSyrProviders.length > 0
         ? (() => {
@@ -1346,7 +1353,7 @@ function LocationReport({ location, locations, metrics, dailyMetrics, opsData, b
         })()
         : null;
 
-      const peerRevCollRows = (revCollProvData || []).filter(r => peers.includes(r.c) && periodSet.has(r.w));
+      const peerRevCollRows = (dailyRevCollProvData || []).filter(r => peers.includes(r.c) && inDateRange(r));
       const peerRevCollProviders = [...new Set(peerRevCollRows.map(r => r.pr))];
       const peerAvgCollPct = peerRevCollProviders.length > 0
         ? (() => {
@@ -1357,7 +1364,7 @@ function LocationReport({ location, locations, metrics, dailyMetrics, opsData, b
         : null;
 
       // Peer averages for new metrics: Avg Rev Per Patient, Utilization, Rev Per Hour
-      const peerMpRows = (metricsProviderData || []).filter(r => peers.includes(r.c) && periodSet.has(r.w));
+      const peerMpRows = (dailyMetricsProviderData || []).filter(r => peers.includes(r.c) && inDateRange(r));
       const peerMpProviders = [...new Set(peerMpRows.map(r => r.pr))];
       const peerAvgRevPerPt = peerMpProviders.length > 0
         ? (() => {
@@ -1402,30 +1409,31 @@ function LocationReport({ location, locations, metrics, dailyMetrics, opsData, b
         const injRev = prInjRows.reduce((s, r) => s + (Number(r.r) || 0), 0);
 
         // Botox units (weighted avg = total units / invoice count)
-        const prBtxRows = (btxProviderData || []).filter(r => r.c === location && r.pr === pr && periodSet.has(r.w) && (Number(r.total_qty) || 0) > 0);
+        const prBtxRows = (dailyBtxProviderData || []).filter(r => r.c === location && r.pr === pr && inDateRange(r) && (Number(r.total_qty) || 0) > 0);
         const btxTotal = prBtxRows.reduce((s, r) => s + (Number(r.total_qty) || 0), 0);
         const btxN = prBtxRows.reduce((s, r) => s + (Number(r.n) || 0), 0);
         const avgBtx = btxN > 0 ? btxTotal / btxN : null;
 
         // Syringe data
-        const prSyrRows = (syringeProvData || []).filter(r => r.c === location && r.pr === pr && periodSet.has(r.w));
+        const prSyrRows = (dailySyringeProvData || []).filter(r => r.c === location && r.pr === pr && inDateRange(r));
         const prSyrInjRows = prSyrRows.filter(r => r.si != null && Number(r.si) > 0);
         const prSyrFillerRows = prSyrRows.filter(r => r.sf != null && Number(r.sf) > 0);
         const avgSyrInj = prSyrInjRows.length ? prSyrInjRows.reduce((s, r) => s + (Number(r.si) || 0), 0) / prSyrInjRows.length : null;
         const avgSyrFiller = prSyrFillerRows.length ? prSyrFillerRows.reduce((s, r) => s + (Number(r.sf) || 0), 0) / prSyrFillerRows.length : null;
 
         // Collections %
-        const prCollRows = (revCollProvData || []).filter(r => r.c === location && r.pr === pr && periodSet.has(r.w));
+        const prCollRows = (dailyRevCollProvData || []).filter(r => r.c === location && r.pr === pr && inDateRange(r));
         const prRev = prCollRows.reduce((s, r) => s + (Number(r.rev) || 0), 0);
         const prCollVal = prCollRows.reduce((s, r) => s + (Number(r.coll) || 0), 0);
         const collPct = prRev > 0 ? (prCollVal / prRev) * 100 : null;
 
         // Avg Rev Per Patient
-        const prMpRows = (metricsProviderData || []).filter(r => r.c === location && r.pr === pr && periodSet.has(r.w));
+        const prMpRows = (dailyMetricsProviderData || []).filter(r => r.c === location && r.pr === pr && inDateRange(r));
         const prTotalPt = prMpRows.reduce((s, r) => s + (Number(r.p) || 0), 0);
         const avgRevPerPt = prTotalPt > 0 ? prRev / prTotalPt : null;
 
-        // Utilization & Rev Per Net Provider Hour
+        // Utilization & Rev Per Net Provider Hour — kept weekly (rate metric;
+        // weekly bucketing is the natural unit for hours/utilization).
         const prUhRows = (utilHoursProviderData || []).filter(r => r.c === location && r.pr === pr && periodSet.has(r.w));
         const prNonZeroUtil = prUhRows.filter(r => Number(r.ur) > 0);
         const provUtil = prNonZeroUtil.length > 0 ? prNonZeroUtil.reduce((s, r) => s + (Number(r.ur) || 0), 0) / prNonZeroUtil.length : null;
@@ -1605,7 +1613,7 @@ function LocationReport({ location, locations, metrics, dailyMetrics, opsData, b
       // Section 4 data
       quickWins, recommendations: topRecs,
     };
-  }, [location, locations, metrics, dailyMetrics, opsData, btxData, syringeLocData, utilizationData, providerHoursData, injRevProviderData, btxProviderData, syringeProvData, revCollProvData, budgetData, metricsProviderData, opsProviderData, utilHoursProviderData, kpiProviders, effProviders, reportPeriod]);
+  }, [location, locations, metrics, dailyMetrics, opsData, btxData, syringeLocData, utilizationData, providerHoursData, injRevProviderData, btxProviderData, syringeProvData, revCollProvData, budgetData, metricsProviderData, opsProviderData, utilHoursProviderData, dailyInjRevProviderData, dailyRevCollProvData, dailyMetricsProviderData, dailyBtxProviderData, dailySyringeProvData, kpiProviders, effProviders, reportPeriod]);
 
   if (!reportData) return null;
 
@@ -2366,6 +2374,16 @@ export default function PerformanceTracker({ initialLocTypes, initialPractices, 
   const [metricsProviderData, setMetricsProviderData] = useState([]);
   const [opsProviderData, setOpsProviderData] = useState([]);
   const [utilHoursProviderData, setUtilHoursProviderData] = useState([]);
+  // Daily-grain per-provider feeds — used by the Provider Performance cards so
+  // date-range filters (Yesterday, MTD, QTD, YTD, L30, L60) return exact
+  // calendar windows rather than the union of weeks that touch the window.
+  // Currently populated from a placeholder split of the weekly files; replace
+  // with daily-grain Corral output once the upstream SQL is rewritten.
+  const [dailyInjRevProviderData, setDailyInjRevProviderData] = useState([]);
+  const [dailyRevCollProvData, setDailyRevCollProvData] = useState([]);
+  const [dailyMetricsProviderData, setDailyMetricsProviderData] = useState([]);
+  const [dailyBtxProviderData, setDailyBtxProviderData] = useState([]);
+  const [dailySyringeProvData, setDailySyringeProvData] = useState([]);
   const [loading, setLoading] = useState(true);
 
   const [selectedLocTypes, setSelectedLocTypes] = useState(initialLocTypes || []);
@@ -2462,7 +2480,13 @@ export default function PerformanceTracker({ initialLocTypes, initialPractices, 
       fetch(`${BP}/data/performance/weekly-metrics-provider.json`).then(r => r.json()).catch(() => []),
       fetch(`${BP}/data/performance/weekly-ops-provider.json`).then(r => r.json()).catch(() => []),
       fetch(`${BP}/data/performance/weekly-util-hours-provider.json`).then(r => r.json()).catch(() => []),
-    ]).then(([locs, met, daily, ops, btx, bud, injRevProv, btxProv, ntxFiller, syrLoc, syrProv, revCollProv, provHours, utilization, metricsProvData, opsProvData, utilHoursProvData]) => {
+      // Daily-grain per-provider feeds (placeholders for now — see comment on state declarations)
+      fetch(`${BP}/data/performance/daily-inj-rev-provider.json`).then(r => r.json()).catch(() => []),
+      fetch(`${BP}/data/performance/daily-rev-coll-provider.json`).then(r => r.json()).catch(() => []),
+      fetch(`${BP}/data/performance/daily-metrics-provider.json`).then(r => r.json()).catch(() => []),
+      fetch(`${BP}/data/performance/daily-btx-provider.json`).then(r => r.json()).catch(() => []),
+      fetch(`${BP}/data/performance/daily-syringe-provider.json`).then(r => r.json()).catch(() => []),
+    ]).then(([locs, met, daily, ops, btx, bud, injRevProv, btxProv, ntxFiller, syrLoc, syrProv, revCollProv, provHours, utilization, metricsProvData, opsProvData, utilHoursProvData, dailyInjRevProv, dailyRevCollProv, dailyMetricsProv, dailyBtxProv, dailySyrProv]) => {
       setLocations(locs);
       setMetrics(met);
       setDailyMetrics(daily);
@@ -2480,6 +2504,11 @@ export default function PerformanceTracker({ initialLocTypes, initialPractices, 
       setMetricsProviderData(metricsProvData);
       setOpsProviderData(opsProvData);
       setUtilHoursProviderData(utilHoursProvData);
+      setDailyInjRevProviderData(dailyInjRevProv);
+      setDailyRevCollProvData(dailyRevCollProv);
+      setDailyMetricsProviderData(dailyMetricsProv);
+      setDailyBtxProviderData(dailyBtxProv);
+      setDailySyringeProvData(dailySyrProv);
       setLoading(false);
       // Mark data as loaded so cleanup effects can run
       // Use a timeout to let the first render with data settle before enabling cleanup
@@ -4625,6 +4654,11 @@ export default function PerformanceTracker({ initialLocTypes, initialPractices, 
             metricsProviderData={metricsProviderData}
             opsProviderData={opsProviderData}
             utilHoursProviderData={utilHoursProviderData}
+            dailyInjRevProviderData={dailyInjRevProviderData}
+            dailyRevCollProvData={dailyRevCollProvData}
+            dailyMetricsProviderData={dailyMetricsProviderData}
+            dailyBtxProviderData={dailyBtxProviderData}
+            dailySyringeProvData={dailySyringeProvData}
           />
         )}
 

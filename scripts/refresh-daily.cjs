@@ -61,6 +61,38 @@ function replaceWeek(file, newRows) {
   console.log(`${file}: ${existing.filter(r => r.w === W).length} removed, ${newRows.length} added -> total=${merged.length}, latest=${weeks[weeks.length - 1]}`);
 }
 
+// Replace EVERY week present in newRows. Use this when the input q-file
+// contains the trailing N weeks (instead of only the current week).
+//
+// Why this exists: the original `replaceWeek` snapshots one week at a time,
+// which means a partial-week input (Zenoti's flat_file lags real Zenoti by
+// hours/days) gets baked in and never overwritten. We saw this on
+// 2026-04-13 — Q11 captured only Apr 13 for Christopher Blaisdell, Apr 13–14
+// for Julie Skowronski, and zero rows for Kat Yung (her week started Apr 17).
+// To fix going forward: switch the upstream SQL to emit `WHERE sale_date >=
+// CURRENT_DATE - INTERVAL '4 weeks'` and call replaceWeeks instead of
+// replaceWeek. Re-running it daily then self-heals any partial-week capture
+// within ~4 days of the lag clearing.
+function replaceWeeks(file, newRows) {
+  const newWeekSet = new Set(newRows.map(r => r.w).filter(Boolean));
+  if (newWeekSet.size === 0) {
+    console.warn(`${file}: replaceWeeks called with no week info — falling back to replaceWeek with W=${W}`);
+    return replaceWeek(file, newRows);
+  }
+  const existing = readJson(file);
+  const removed = existing.filter(r => newWeekSet.has(r.w)).length;
+  const merged = [...existing.filter(r => !newWeekSet.has(r.w)), ...newRows];
+  merged.sort((a, b) =>
+    (a.w || '').localeCompare(b.w || '') ||
+    (a.c || '').localeCompare(b.c || '') ||
+    (a.pr || '').localeCompare(b.pr || '')
+  );
+  writeJson(file, merged);
+  const weeks = [...new Set(merged.map(r => r.w))].sort();
+  const replacedWeeks = [...newWeekSet].sort().join(', ');
+  console.log(`${file}: ${removed} removed across {${replacedWeeks}}, ${newRows.length} added -> total=${merged.length}, latest=${weeks[weeks.length - 1]}`);
+}
+
 // ── Input validation guard ──────────────────────────────────────────────────
 // Aborts if any q{N}.json is missing, stale (mtime < today), unparseable, or
 // unexpectedly empty. Prevents the silent stale-data ships we saw before
@@ -261,10 +293,20 @@ const metricsProvRows = q10Data.filter(r => knownCenters.has(r.c) && r.pr != nul
 replaceWeek('weekly-metrics-provider.json', metricsProvRows);
 
 // ── 9. WEEKLY-INJ-REV-PROVIDER ───────────────────────────────────────────────
+// Q11 should now emit the trailing 4 weeks of injectable revenue (not just the
+// current week) — the SQL filter is `sale_date >= DATE_TRUNC('week',
+// CURRENT_DATE - INTERVAL '3 weeks')`. Each row carries its own `w` Monday
+// week-anchor, and replaceWeeks below replaces every week present in the
+// input. This self-heals partial-week-snapshot bugs from upstream flat_file
+// lag (see comment on replaceWeeks for the 2026-04-13 incident).
+//
+// Backward compatibility: if Q11 still emits only the current week (rows
+// missing `w` or all sharing the same `w`), replaceWeeks behaves exactly
+// like replaceWeek for that single week.
 const q11Data = readInput('q11.json');
 const injRevProvRows = q11Data.filter(r => knownCenters.has(r.c) && r.pr != null)
-  .map(r => ({ w: W, c: r.c, pr: r.pr, r: ff(r.r) || 0 }));
-replaceWeek('weekly-inj-rev-provider.json', injRevProvRows);
+  .map(r => ({ w: r.w || W, c: r.c, pr: r.pr, r: ff(r.r) || 0 }));
+replaceWeeks('weekly-inj-rev-provider.json', injRevProvRows);
 
 // ── 10. WEEKLY-REV-COLL-PROVIDER ─────────────────────────────────────────────
 const q12Data = readInput('q12.json');
