@@ -97,22 +97,34 @@ function replaceWeeks(file, newRows) {
 // Aborts if any q{N}.json is missing, stale (mtime < today), unparseable, or
 // unexpectedly empty. Prevents the silent stale-data ships we saw before
 // 2026-04-28 (e.g. q12 not refreshed for days, q14 carried over from yesterday).
+//
+// earlyMonday: q1 is empty when the refresh runs before any sales land on the
+// first day of the week. When that happens, all week-anchored queries (q4, q5,
+// q7, q10, q11, q12, q16, q17) are also legitimately empty — same data source,
+// same date filter. Mark them allowEmpty in that case.
+const q1Raw = (() => {
+  try { return JSON.parse(fs.readFileSync(path.join(__dirname, 'q1.json'), 'utf8').replace(/^﻿/, '')); }
+  catch { return null; }
+})();
+const earlyMonday = Array.isArray(q1Raw) && q1Raw.length === 0;
+if (earlyMonday) console.log('earlyMonday=true — week-anchored queries (q4/q5/q7/q10-q12/q16/q17) allowed empty');
+
 const REQUIRED_INPUTS = [
-  { f: 'q1.json',  allowEmpty: true,  desc: 'Weekly revenue (early Monday may legitimately be empty)' },
-  { f: 'q3.json',  allowEmpty: false, desc: 'Weekly ops by center' },
-  { f: 'q4.json',  allowEmpty: false, desc: 'Weekly NTX/filler by center' },
-  { f: 'q5.json',  allowEmpty: false, desc: 'Botox units by provider (dataset 1237 — must have data)' },
-  { f: 'q6.json',  allowEmpty: true,  desc: 'Syringe by location (raw flat_file — known to lag, allowed empty)' },
-  { f: 'q7.json',  allowEmpty: false, desc: 'Provider hours by location' },
-  { f: 'q8.json',  allowEmpty: false, desc: 'Daily revenue (7-day lookback)' },
-  { f: 'q9.json',  allowEmpty: false, desc: 'Daily collections (7-day lookback)' },
-  { f: 'q10.json', allowEmpty: false, desc: 'Provider weekly metrics' },
-  { f: 'q11.json', allowEmpty: false, desc: 'Provider injectable revenue' },
-  { f: 'q12.json', allowEmpty: false, desc: 'Provider collections (dataset 1237 — must have data)' },
-  { f: 'q13.json', allowEmpty: true,  desc: 'Provider syringe (raw flat_file — known to lag, allowed empty)' },
-  { f: 'q14.json', allowEmpty: false, desc: 'Provider ops rates (dataset 754 — must have data)' },
-  { f: 'q16.json', allowEmpty: false, desc: 'Location utilization' },
-  { f: 'q17.json', allowEmpty: false, desc: 'Provider utilization' },
+  { f: 'q1.json',  allowEmpty: true,         desc: 'Weekly revenue (early Monday may legitimately be empty)' },
+  { f: 'q3.json',  allowEmpty: false,         desc: 'Weekly ops by center' },
+  { f: 'q4.json',  allowEmpty: earlyMonday,   desc: 'Weekly NTX/filler by center' },
+  { f: 'q5.json',  allowEmpty: earlyMonday,   desc: 'Botox units by provider (dataset 1237 — must have data)' },
+  { f: 'q6.json',  allowEmpty: true,          desc: 'Syringe by location (raw flat_file — known to lag, allowed empty)' },
+  { f: 'q7.json',  allowEmpty: earlyMonday,   desc: 'Provider hours by location' },
+  { f: 'q8.json',  allowEmpty: false,         desc: 'Daily revenue (7-day lookback)' },
+  { f: 'q9.json',  allowEmpty: false,         desc: 'Daily collections (7-day lookback)' },
+  { f: 'q10.json', allowEmpty: earlyMonday,   desc: 'Provider weekly metrics' },
+  { f: 'q11.json', allowEmpty: earlyMonday,   desc: 'Provider injectable revenue' },
+  { f: 'q12.json', allowEmpty: earlyMonday,   desc: 'Provider collections (dataset 1237 — must have data)' },
+  { f: 'q13.json', allowEmpty: true,          desc: 'Provider syringe (raw flat_file — known to lag, allowed empty)' },
+  { f: 'q14.json', allowEmpty: false,         desc: 'Provider ops rates (dataset 754 — must have data)' },
+  { f: 'q16.json', allowEmpty: earlyMonday,   desc: 'Location utilization' },
+  { f: 'q17.json', allowEmpty: earlyMonday,   desc: 'Provider utilization' },
 ];
 
 (function validateInputs() {
