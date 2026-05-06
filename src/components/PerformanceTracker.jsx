@@ -936,6 +936,14 @@ function LocationReport({ location, locations, metrics, dailyMetrics, opsData, b
       periodWeeks = allWeeks.filter(w => weekOverlaps(w, from, to));
       const monthName = from.toLocaleDateString('en-US', { month: 'short' });
       periodLabel = `${monthName} 1 – ${monthName} ${to.getDate()}, ${currentYear}`;
+    } else if (reportPeriod === 'LAST_MONTH') {
+      const prevMonth = currentMonth === 0 ? 11 : currentMonth - 1;
+      const prevYear  = currentMonth === 0 ? currentYear - 1 : currentYear;
+      const from = new Date(prevYear, prevMonth, 1);
+      const to   = new Date(prevYear, prevMonth + 1, 0); // last day of prev month
+      periodWeeks = allWeeks.filter(w => weekOverlaps(w, from, to));
+      const monthName = from.toLocaleDateString('en-US', { month: 'short' });
+      periodLabel = `${monthName} 1 – ${monthName} ${to.getDate()}, ${prevYear}`;
     } else if (reportPeriod === 'QTD') {
       // Full calendar quarter — 1st day through last day of current quarter
       const currentQuarter = Math.floor(currentMonth / 3);
@@ -975,6 +983,12 @@ function LocationReport({ location, locations, metrics, dailyMetrics, opsData, b
       kpiTo   = kpiFrom; // single day
     } else if (reportPeriod === 'MTD') {
       kpiFrom = `${currentYear}-${String(currentMonth + 1).padStart(2, '0')}-01`;
+    } else if (reportPeriod === 'LAST_MONTH') {
+      const prevMonth = currentMonth === 0 ? 11 : currentMonth - 1;
+      const prevYear  = currentMonth === 0 ? currentYear - 1 : currentYear;
+      const lastDay   = new Date(prevYear, prevMonth + 1, 0);
+      kpiFrom = `${prevYear}-${String(prevMonth + 1).padStart(2, '0')}-01`;
+      kpiTo   = lastDay.toISOString().slice(0, 10);
     } else if (reportPeriod === 'QTD') {
       const qStart = Math.floor(currentMonth / 3) * 3;
       kpiFrom = `${currentYear}-${String(qStart + 1).padStart(2, '0')}-01`;
@@ -1811,7 +1825,7 @@ function LocationReport({ location, locations, metrics, dailyMetrics, opsData, b
         {/* Period selector */}
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
           <span style={{ fontSize: 10, fontFamily: FONT.body, color: 'rgba(255,255,255,0.55)', letterSpacing: 0.8, textTransform: 'uppercase' }}>Period</span>
-          {[['YESTERDAY','Yesterday'], ['MTD','MTD'], ['QTD','QTD'], ['YTD','YTD'], ['L30','Last 30'], ['L60','Last 60']].map(([key, label]) => (
+          {[['YESTERDAY','Yesterday'], ['MTD','MTD'], ['LAST_MONTH','Last Month'], ['QTD','QTD'], ['YTD','YTD'], ['L30','Last 30'], ['L60','Last 60']].map(([key, label]) => (
             <button
               key={key}
               onClick={() => setReportPeriod(key)}
