@@ -355,4 +355,90 @@ const utilProvRows = q17Data.filter(r => knownCenters.has(r.c) && r.pr != null).
 }).filter(r => r.h > 0);
 replaceWeek('weekly-util-hours-provider.json', utilProvRows);
 
+// ── 14. DAILY PROVIDER FILES (spread weekly data across 7 days) ──────────────
+// Provider Performance cards use daily-grain files so MTD/QTD/YTD date filters
+// resolve to exact calendar boundaries rather than whole-week buckets.
+// Each weekly row becomes 7 identical daily rows (Mon–Sun): totals divided by 7,
+// rates/averages kept constant.
+const WEEK_DAYS = 7;
+const wDates = (() => {
+  const dates = [];
+  const base = new Date(W + 'T00:00:00Z');
+  for (let i = 0; i < WEEK_DAYS; i++) {
+    const d = new Date(base); d.setUTCDate(d.getUTCDate() + i);
+    dates.push(d.toISOString().slice(0, 10));
+  }
+  return dates;
+})();
+const wDateSet = new Set(wDates);
+
+function replaceDailyWeek(file, newRows) {
+  const existing = readJson(file);
+  const merged = [...existing.filter(r => !wDateSet.has(r.d)), ...newRows];
+  merged.sort((a, b) =>
+    (a.d || '').localeCompare(b.d || '') ||
+    (a.c || '').localeCompare(b.c || '') ||
+    (a.pr || '').localeCompare(b.pr || '')
+  );
+  writeJson(file, merged);
+  const removed = existing.filter(r => wDateSet.has(r.d)).length;
+  console.log(`${file}: ${removed} removed (${W} week), ${newRows.length} added -> total=${merged.length}, latest=${wDates[wDates.length - 1]}`);
+}
+
+// daily-inj-rev-provider: r is weekly total → divide by 7
+const dailyInjRevProv = [];
+for (const r of injRevProvRows.filter(rr => rr.w === W)) {
+  for (const d of wDates)
+    dailyInjRevProv.push({ d, c: r.c, pr: r.pr, r: Math.round((r.r / WEEK_DAYS) * 100) / 100 });
+}
+replaceDailyWeek('daily-inj-rev-provider.json', dailyInjRevProv);
+
+// daily-metrics-provider: s/p/rt/inj are weekly totals → divide by 7
+const dailyMetricsProv = [];
+for (const r of metricsProvRows) {
+  for (const d of wDates)
+    dailyMetricsProv.push({ d, c: r.c, pr: r.pr,
+      s:   Math.round((r.s   / WEEK_DAYS) * 100) / 100,
+      p:   Math.round((r.p   / WEEK_DAYS) * 10000) / 10000,
+      rt:  Math.round((r.rt  / WEEK_DAYS) * 100) / 100,
+      inj: Math.round((r.inj / WEEK_DAYS) * 100) / 100,
+    });
+}
+replaceDailyWeek('daily-metrics-provider.json', dailyMetricsProv);
+
+// daily-btx-provider: n/total_qty are weekly totals → divide by 7; b is rate → keep
+const dailyBtxProv = [];
+for (const r of btxProvRows) {
+  for (const d of wDates)
+    dailyBtxProv.push({ d, c: r.c, pr: r.pr,
+      n:         Math.round(((r.n         || 0) / WEEK_DAYS) * 10000) / 10000,
+      b:         r.b,
+      total_qty: Math.round(((r.total_qty || 0) / WEEK_DAYS) * 10000) / 10000,
+    });
+}
+replaceDailyWeek('daily-btx-provider.json', dailyBtxProv);
+
+// daily-rev-coll-provider: rev/coll are weekly totals → divide by 7
+const dailyRevCollProv = [];
+for (const r of revCollProvRows) {
+  for (const d of wDates)
+    dailyRevCollProv.push({ d, c: r.c, pr: r.pr,
+      rev:  Math.round((r.rev  / WEEK_DAYS) * 100) / 100,
+      coll: Math.round((r.coll / WEEK_DAYS) * 100) / 100,
+    });
+}
+replaceDailyWeek('daily-rev-coll-provider.json', dailyRevCollProv);
+
+// daily-syringe-provider: n is weekly total → divide by 7; si/sf are rates → keep
+const dailySyrProv = [];
+for (const r of syrProvRows) {
+  for (const d of wDates)
+    dailySyrProv.push({ d, c: r.c, pr: r.pr,
+      n:  Math.round(((r.n || 0) / WEEK_DAYS) * 10000) / 10000,
+      si: r.si,
+      sf: r.sf,
+    });
+}
+replaceDailyWeek('daily-syringe-provider.json', dailySyrProv);
+
 console.log('\n=== Done ===');
