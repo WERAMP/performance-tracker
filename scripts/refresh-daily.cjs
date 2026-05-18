@@ -98,16 +98,20 @@ function replaceWeeks(file, newRows) {
 // unexpectedly empty. Prevents the silent stale-data ships we saw before
 // 2026-04-28 (e.g. q12 not refreshed for days, q14 carried over from yesterday).
 //
-// earlyMonday: q1 is empty when the refresh runs before any sales land on the
-// first day of the week. When that happens, all week-anchored queries (q4, q5,
-// q7, q10, q11, q12, q16, q17) are also legitimately empty — same data source,
-// same date filter. Mark them allowEmpty in that case.
+// earlyMonday: true when the week just started and week-anchored queries may
+// legitimately be empty. Two cases:
+//   1. Q1 is completely empty (no sales at all yet on day 1 of week)
+//   2. It is Monday (day 1 of week) regardless of Q1 — because Q7/Q16/Q17 use
+//      `< CURRENT_DATE` as upper bound, meaning they always return 0 rows on
+//      Monday (no completed days exist yet), and Q5/Q11 are empty before any
+//      clinics have done injectable/botox appointments (typically 7am run).
 const q1Raw = (() => {
   try { return JSON.parse(fs.readFileSync(path.join(__dirname, 'q1.json'), 'utf8').replace(/^﻿/, '')); }
   catch { return null; }
 })();
-const earlyMonday = Array.isArray(q1Raw) && q1Raw.length === 0;
-if (earlyMonday) console.log('earlyMonday=true — week-anchored queries (q4/q5/q7/q10-q12/q16/q17) allowed empty');
+const isMonday = new Date().getDay() === 1;
+const earlyMonday = (Array.isArray(q1Raw) && q1Raw.length === 0) || isMonday;
+if (earlyMonday) console.log(`earlyMonday=true (isMonday=${isMonday}, q1Rows=${Array.isArray(q1Raw) ? q1Raw.length : 'n/a'}) — week-anchored queries (q4/q5/q7/q10-q12/q16/q17) allowed empty`);
 
 const REQUIRED_INPUTS = [
   { f: 'q1.json',  allowEmpty: true,         desc: 'Weekly revenue (early Monday may legitimately be empty)' },
