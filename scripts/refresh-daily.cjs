@@ -110,8 +110,10 @@ const q1Raw = (() => {
   catch { return null; }
 })();
 const isMonday = new Date().getDay() === 1;
-const earlyMonday = (Array.isArray(q1Raw) && q1Raw.length === 0) || isMonday;
-if (earlyMonday) console.log(`earlyMonday=true (isMonday=${isMonday}, q1Rows=${Array.isArray(q1Raw) ? q1Raw.length : 'n/a'}) — week-anchored queries (q4/q5/q7/q10-q12/q16/q17) allowed empty`);
+const isTuesdayAfterHoliday = new Date().getDay() === 2 &&
+  Array.isArray(q1Raw) && !q1Raw.some(r => parseFloat(r.inj || 0) > 0);
+const earlyMonday = (Array.isArray(q1Raw) && q1Raw.length === 0) || isMonday || isTuesdayAfterHoliday;
+if (earlyMonday) console.log(`earlyMonday=true (isMonday=${isMonday}, isTuesdayAfterHoliday=${isTuesdayAfterHoliday}, q1Rows=${Array.isArray(q1Raw) ? q1Raw.length : 'n/a'}) — week-anchored queries (q4/q5/q7/q10-q12/q16/q17) allowed empty`);
 
 const REQUIRED_INPUTS = [
   { f: 'q1.json',  allowEmpty: true,         desc: 'Weekly revenue (early Monday may legitimately be empty)' },
