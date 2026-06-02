@@ -12,6 +12,35 @@ import {
 // Base path prefix for static data fetches (matches Vite `base`)
 const BP = import.meta.env.BASE_URL.replace(/\/$/, '');
 
+// ── Budget helpers (day-accurate, sourced from monthly-budget.json) ──────────
+// Budgets are exact monthly goals. To value any date range we bill each calendar
+// day at its own month's daily rate (monthlyGoal / daysInMonth), so periods that
+// straddle month boundaries are correct and a full month equals the sheet goal.
+function buildMonthlyBudgetMap(rows) {
+  const map = {};
+  for (const r of rows || []) (map[r.c] = map[r.c] || {})[r.m] = { b: r.b, cb: r.cb };
+  return map;
+}
+// Sum `field` ('b'|'cb') over [from,to] inclusive (Date objects) for one center.
+function budgetSumDays(monthlyMap, center, from, to, field) {
+  const m = monthlyMap[center];
+  if (!m) return 0;
+  let total = 0;
+  const d = new Date(from.getFullYear(), from.getMonth(), from.getDate());
+  while (d <= to) {
+    const mk = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+    const e = m[mk];
+    if (e && e[field] != null) total += e[field] / new Date(d.getFullYear(), d.getMonth() + 1, 0).getDate();
+    d.setDate(d.getDate() + 1);
+  }
+  return total;
+}
+// Exact full-month goal for one center (the sheet's monthly goal, unrounded loss-free).
+function budgetMonthGoal(monthlyMap, center, monthKey, field) {
+  const e = monthlyMap[center] && monthlyMap[center][monthKey];
+  return e && e[field] != null ? e[field] : 0;
+}
+
 // ── CSS Variables (inline, matching ampintelligence.ai) ──────
 const V = {
   navy:      '#041E42',
@@ -888,7 +917,7 @@ function buildOpsChart(opsData, filteredNames, opsNameMap, valueKey) {
 //  Location Performance Report (collapsible, shown for single location)
 // ══════════════════════════════════════════════════════════════
 
-function LocationReport({ location, locations, metrics, dailyMetrics, opsData, btxData, syringeLocData, utilizationData, providerHoursData, injRevProviderData, btxProviderData, syringeProvData, revCollProvData, budgetData, metricsProviderData, opsProviderData, utilHoursProviderData, dailyInjRevProviderData, dailyRevCollProvData, dailyMetricsProviderData, dailyBtxProviderData, dailySyringeProvData }) {
+function LocationReport({ location, locations, metrics, dailyMetrics, opsData, btxData, syringeLocData, utilizationData, providerHoursData, injRevProviderData, btxProviderData, syringeProvData, revCollProvData, budgetData, monthlyBudgetData, metricsProviderData, opsProviderData, utilHoursProviderData, dailyInjRevProviderData, dailyRevCollProvData, dailyMetricsProviderData, dailyBtxProviderData, dailySyringeProvData }) {
   const [expandedSections, setExpandedSections] = useState({ kpi: false, efficiency: false, providers: false, recommendations: false });
   const toggleSection = (key) => setExpandedSections(prev => ({ ...prev, [key]: !prev[key] }));
   const [reportPeriod, setReportPeriod] = useState('MTD');
@@ -1061,51 +1090,19 @@ function LocationReport({ location, locations, metrics, dailyMetrics, opsData, b
 
     const locColl = sumDaily(location, 'co');
     const locCollPct = locRev > 0 ? locColl / locRev * 100 : null;
-    // Pro-rate weekly budget to the exact daily period [kpiFrom, kpiTo].
-    // Each week's budget is distributed evenly across its 7 calendar days;
-    // only the days that fall within the period are counted.
-    const proRateBudget = (locName, field) => {
-      if (!budgetData || !budgetData.length) return 0;
-      const from = new Date(kpiFrom + 'T00:00:00');
-      const to   = new Date(kpiTo   + 'T00:00:00');
-      let total = 0;
-      for (const row of budgetData) {
-        if (row.c !== locName) continue;
-        const val = Number(row[field]);
-        if (!val || val <= 0) continue;
-        const wStart = new Date(row.w + 'T00:00:00');
-        const wEnd   = new Date(wStart); wEnd.setDate(wEnd.getDate() + 6);
-        const overlapStart = from > wStart ? from : wStart;
-        const overlapEnd   = to   < wEnd   ? to   : wEnd;
-        if (overlapEnd < overlapStart) continue;
-        const daysOverlap = Math.round((overlapEnd - overlapStart) / 86400000) + 1;
-        total += (val / 7) * daysOverlap;
-      }
-      return total;
-    };
+    // Day-accurate budget from exact monthly goals: each calendar day is billed
+    // at its own month's rate (monthlyGoal / daysInMonth), so periods that span
+    // month boundaries are exact and a full month equals the sheet's goal.
+    const monthlyMap = buildMonthlyBudgetMap(monthlyBudgetData);
+    const proRateBudget = (locName, field) =>
+      budgetSumDays(monthlyMap, locName, new Date(kpiFrom + 'T00:00:00'), new Date(kpiTo + 'T00:00:00'), field);
     const locRevBudget  = proRateBudget(location, 'b');
     const locCollBudget = proRateBudget(location, 'cb');
 
-    // Full-month budget (only meaningful for MTD — covers 1st through last day of month)
-    const fullMonthBudget = (locName, field) => {
-      if (reportPeriod !== 'MTD' || !budgetData || !budgetData.length) return 0;
-      const from = new Date(currentYear, currentMonth, 1);
-      const to   = new Date(currentYear, currentMonth + 1, 0); // last day of month
-      let total = 0;
-      for (const row of budgetData) {
-        if (row.c !== locName) continue;
-        const val = Number(row[field]);
-        if (!val || val <= 0) continue;
-        const wStart = new Date(row.w + 'T00:00:00');
-        const wEnd   = new Date(wStart); wEnd.setDate(wEnd.getDate() + 6);
-        const overlapStart = from > wStart ? from : wStart;
-        const overlapEnd   = to   < wEnd   ? to   : wEnd;
-        if (overlapEnd < overlapStart) continue;
-        const daysOverlap = Math.round((overlapEnd - overlapStart) / 86400000) + 1;
-        total += (val / 7) * daysOverlap;
-      }
-      return total;
-    };
+    // Full-month budget (only meaningful for MTD) — the exact monthly goal.
+    const currentMonthKey = `${currentYear}-${String(currentMonth + 1).padStart(2, '0')}`;
+    const fullMonthBudget = (locName, field) =>
+      reportPeriod === 'MTD' ? budgetMonthGoal(monthlyMap, locName, currentMonthKey, field) : 0;
     const fullMonthRevBudget  = fullMonthBudget(location, 'b');
     const fullMonthCollBudget = fullMonthBudget(location, 'cb');
 
@@ -1627,7 +1624,7 @@ function LocationReport({ location, locations, metrics, dailyMetrics, opsData, b
       // Section 4 data
       quickWins, recommendations: topRecs,
     };
-  }, [location, locations, metrics, dailyMetrics, opsData, btxData, syringeLocData, utilizationData, providerHoursData, injRevProviderData, btxProviderData, syringeProvData, revCollProvData, budgetData, metricsProviderData, opsProviderData, utilHoursProviderData, dailyInjRevProviderData, dailyRevCollProvData, dailyMetricsProviderData, dailyBtxProviderData, dailySyringeProvData, kpiProviders, effProviders, reportPeriod]);
+  }, [location, locations, metrics, dailyMetrics, opsData, btxData, syringeLocData, utilizationData, providerHoursData, injRevProviderData, btxProviderData, syringeProvData, revCollProvData, budgetData, monthlyBudgetData, metricsProviderData, opsProviderData, utilHoursProviderData, dailyInjRevProviderData, dailyRevCollProvData, dailyMetricsProviderData, dailyBtxProviderData, dailySyringeProvData, kpiProviders, effProviders, reportPeriod]);
 
   if (!reportData) return null;
 
@@ -2377,6 +2374,7 @@ export default function PerformanceTracker({ initialLocTypes, initialPractices, 
   const [opsData, setOpsData] = useState([]);
   const [btxData, setBtxData] = useState([]);
   const [budgetData, setBudgetData] = useState([]);
+  const [monthlyBudgetData, setMonthlyBudgetData] = useState([]);
   const [injRevProviderData, setInjRevProviderData] = useState([]);
   const [btxProviderData, setBtxProviderData] = useState([]);
   const [ntxFillerData, setNtxFillerData] = useState([]);
@@ -2500,13 +2498,15 @@ export default function PerformanceTracker({ initialLocTypes, initialPractices, 
       fetch(`${BP}/data/performance/daily-metrics-provider.json`).then(r => r.json()).catch(() => []),
       fetch(`${BP}/data/performance/daily-btx-provider.json`).then(r => r.json()).catch(() => []),
       fetch(`${BP}/data/performance/daily-syringe-provider.json`).then(r => r.json()).catch(() => []),
-    ]).then(([locs, met, daily, ops, btx, bud, injRevProv, btxProv, ntxFiller, syrLoc, syrProv, revCollProv, provHours, utilization, metricsProvData, opsProvData, utilHoursProvData, dailyInjRevProv, dailyRevCollProv, dailyMetricsProv, dailyBtxProv, dailySyrProv]) => {
+      fetch(`${BP}/data/performance/monthly-budget.json`).then(r => r.json()).catch(() => []),
+    ]).then(([locs, met, daily, ops, btx, bud, injRevProv, btxProv, ntxFiller, syrLoc, syrProv, revCollProv, provHours, utilization, metricsProvData, opsProvData, utilHoursProvData, dailyInjRevProv, dailyRevCollProv, dailyMetricsProv, dailyBtxProv, dailySyrProv, monthlyBud]) => {
       setLocations(locs);
       setMetrics(met);
       setDailyMetrics(daily);
       setOpsData(ops);
       setBtxData(btx);
       setBudgetData(bud);
+      setMonthlyBudgetData(monthlyBud);
       setInjRevProviderData(injRevProv);
       setBtxProviderData(btxProv);
       setNtxFillerData(ntxFiller);
@@ -3655,6 +3655,15 @@ export default function PerformanceTracker({ initialLocTypes, initialPractices, 
     }
   }, [opsData, opsProviderData, locationNames, noshowLocs, noshowProviders, isSingleLocation, availableInjProviders, globalTimeMode, globalPeriodCount, chartTimeOverrides]);
 
+  // Exact monthly budget lookup (shared by month-level aggregations below).
+  const monthlyBudgetMap = useMemo(() => buildMonthlyBudgetMap(monthlyBudgetData), [monthlyBudgetData]);
+  // Sum the exact monthly goal for `field` across a set of centers, for one month.
+  const monthBudgetFor = (centerSet, monthKey, field) => {
+    let total = 0;
+    for (const c of centerSet) total += budgetMonthGoal(monthlyBudgetMap, c, monthKey, field);
+    return total;
+  };
+
   // ── Aggregated weekly revenue vs budget (+ per-location breakdowns) ──
   const { revChartData, revChartSeries } = useMemo(() => {
     const centerNames = new Set(locationNames);
@@ -3672,11 +3681,11 @@ export default function PerformanceTracker({ initialLocTypes, initialPractices, 
     // Budget: scope to the locations actually shown on the chart
     // If "Total" is selected, sum all filtered locations' budgets
     // If specific locations are selected, only sum those locations' budgets
+    const budgetCenterNames = revChartLocs.includes('Total')
+      ? centerNames
+      : new Set(revChartLocs.filter(n => n !== 'Total'));
     const budgetWeekMap = {};
     if (budgetData.length) {
-      const budgetCenterNames = revChartLocs.includes('Total')
-        ? centerNames
-        : new Set(revChartLocs.filter(n => n !== 'Total'));
       const budgetFiltered = budgetData.filter(b => budgetCenterNames.has(b.c));
       budgetFiltered.forEach(b => {
         if (!budgetWeekMap[b.w]) budgetWeekMap[b.w] = 0;
@@ -3707,7 +3716,7 @@ export default function PerformanceTracker({ initialLocTypes, initialPractices, 
       const data = months.map(mk => {
         const monthWeeks = allWeeks.filter(w => w.startsWith(mk));
         const rev = monthWeeks.reduce((s, w) => s + (weekMap[w] || 0), 0);
-        const bud = monthWeeks.reduce((s, w) => s + (budgetWeekMap[w] || 0), 0);
+        const bud = monthBudgetFor(budgetCenterNames, mk, 'b'); // exact monthly goal
         const row = { week: formatMonth(mk, mk === curMonth), 'All Locations': rev };
         if (hasBudget) row.Budget = bud;
         revChartLocs.filter(n => n !== 'Total').forEach(loc => {
@@ -3719,7 +3728,7 @@ export default function PerformanceTracker({ initialLocTypes, initialPractices, 
       const series = [...(revChartLocs.includes('Total') ? ['All Locations'] : []), ...(hasBudget ? ['Budget'] : []), ...locs];
       return { revChartData: data, revChartSeries: series };
     }
-  }, [metrics, locationNames, revChartLocs, budgetData, globalTimeMode, globalPeriodCount, chartTimeOverrides]);
+  }, [metrics, locationNames, revChartLocs, budgetData, monthlyBudgetMap, globalTimeMode, globalPeriodCount, chartTimeOverrides]);
 
   const { collChartData, collChartSeries } = useMemo(() => {
     const centerNames = new Set(locationNames);
@@ -3735,11 +3744,11 @@ export default function PerformanceTracker({ initialLocTypes, initialPractices, 
       }
     });
     // Collections budget: scope to the locations shown on the chart (same logic as revenue budget)
+    const budgetCenterNames = collChartLocs.includes('Total')
+      ? centerNames
+      : new Set(collChartLocs.filter(n => n !== 'Total'));
     const collBudgetWeekMap = {};
     if (budgetData.length) {
-      const budgetCenterNames = collChartLocs.includes('Total')
-        ? centerNames
-        : new Set(collChartLocs.filter(n => n !== 'Total'));
       const budgetFiltered = budgetData.filter(b => budgetCenterNames.has(b.c));
       budgetFiltered.forEach(b => {
         if (b.cb == null) return; // no collections goal for this location — skip
@@ -3771,7 +3780,7 @@ export default function PerformanceTracker({ initialLocTypes, initialPractices, 
       const data = months.map(mk => {
         const monthWeeks = allWeeks.filter(w => w.startsWith(mk));
         const coll = monthWeeks.reduce((s, w) => s + (weekMap[w] || 0), 0);
-        const bud = monthWeeks.reduce((s, w) => s + (collBudgetWeekMap[w] || 0), 0);
+        const bud = monthBudgetFor(budgetCenterNames, mk, 'cb'); // exact monthly goal
         const row = { week: formatMonth(mk, mk === curMonth), 'All Locations': coll };
         if (hasBudget) row.Budget = bud;
         collChartLocs.filter(n => n !== 'Total').forEach(loc => {
@@ -3783,13 +3792,12 @@ export default function PerformanceTracker({ initialLocTypes, initialPractices, 
       const series = [...(collChartLocs.includes('Total') ? ['All Locations'] : []), ...(hasBudget ? ['Budget'] : []), ...locs];
       return { collChartData: data, collChartSeries: series };
     }
-  }, [metrics, locationNames, collChartLocs, budgetData, globalTimeMode, globalPeriodCount, chartTimeOverrides]);
+  }, [metrics, locationNames, collChartLocs, budgetData, monthlyBudgetMap, globalTimeMode, globalPeriodCount, chartTimeOverrides]);
 
   // ── MTD Summary ──
   const mtdSummary = useMemo(() => {
     const centerNames = new Set(locationNames);
     const filtered = metrics.filter(m => centerNames.has(m.c));
-    const filteredBudget = budgetData.filter(b => centerNames.has(b.c));
 
     // Group metrics by month
     const byMonth = {};
@@ -3797,14 +3805,6 @@ export default function PerformanceTracker({ initialLocTypes, initialPractices, 
       const month = m.w.substring(0, 7); // "2026-02" or "2026-03"
       if (!byMonth[month]) byMonth[month] = [];
       byMonth[month].push(m);
-    });
-
-    // Group budgets by month
-    const budgetByMonth = {};
-    filteredBudget.forEach(b => {
-      const month = b.w.substring(0, 7);
-      if (!budgetByMonth[month]) budgetByMonth[month] = [];
-      budgetByMonth[month].push(b);
     });
 
     // Current month (for MTD label) and previous 3 months window
@@ -3823,11 +3823,10 @@ export default function PerformanceTracker({ initialLocTypes, initialPractices, 
       .filter(m => byMonth[m]) // only include months that have data
       .map(m => {
         const rows = byMonth[m] || [];
-        const bRows = budgetByMonth[m] || [];
         const revActual = rows.reduce((s, r) => s + (r.s || 0), 0);
         const collActual = rows.reduce((s, r) => s + (r.co || 0), 0);
-        const revBudget = bRows.reduce((s, b) => s + (b.b || 0), 0);
-        const collBudget = bRows.reduce((s, b) => s + (b.cb || 0), 0);
+        const revBudget = monthBudgetFor(centerNames, m, 'b');   // exact monthly goal
+        const collBudget = monthBudgetFor(centerNames, m, 'cb');
         const [yr, mo] = m.split('-').map(Number);
         const monthNames = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
         const label = m === curMonthKey
@@ -3852,7 +3851,7 @@ export default function PerformanceTracker({ initialLocTypes, initialPractices, 
         { label: 'YTD', actual: Math.round(ytdColl), budget: Math.round(ytdCollBudget), isTotal: true },
       ],
     };
-  }, [metrics, locationNames, budgetData]);
+  }, [metrics, locationNames, monthlyBudgetMap]);
 
   // ── Service Mix ──
   const serviceMixData = useMemo(() => {
@@ -4665,6 +4664,7 @@ export default function PerformanceTracker({ initialLocTypes, initialPractices, 
             syringeProvData={syringeProvData}
             revCollProvData={revCollProvData}
             budgetData={budgetData}
+            monthlyBudgetData={monthlyBudgetData}
             metricsProviderData={metricsProviderData}
             opsProviderData={opsProviderData}
             utilHoursProviderData={utilHoursProviderData}
