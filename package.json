@@ -5,8 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build:budget": "node scripts/build-budget-from-sheet.cjs",
-    "prebuild": "node scripts/build-budget-from-sheet.cjs",
+    "sync:budgets": "node scripts/sync-budgets-from-corral.cjs",
     "build": "vite build",
     "preview": "vite preview"
   },
