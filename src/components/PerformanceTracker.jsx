@@ -65,6 +65,35 @@ const FONT = {
   body:    "'Nunito Sans', 'Avenir Next', Avenir, sans-serif",
 };
 
+// Sliding on/off toggle switch with a label (used for the botox "<10 units" filter)
+function ToggleSwitch({ checked, onChange, label, title }) {
+  return (
+    <label
+      title={title}
+      onClick={() => onChange(!checked)}
+      style={{
+        display: 'inline-flex', alignItems: 'center', gap: 7, cursor: 'pointer',
+        userSelect: 'none', whiteSpace: 'nowrap',
+      }}
+    >
+      <span style={{
+        fontSize: 10, fontWeight: 700, letterSpacing: 1, textTransform: 'uppercase',
+        fontFamily: FONT.body, color: checked ? V.navy : V.gray,
+      }}>{label}</span>
+      <span style={{
+        position: 'relative', width: 34, height: 18, borderRadius: 9,
+        background: checked ? V.gold : V.taupe, transition: 'background .15s', flexShrink: 0,
+      }}>
+        <span style={{
+          position: 'absolute', top: 2, left: checked ? 18 : 2,
+          width: 14, height: 14, borderRadius: '50%', background: V.white,
+          transition: 'left .15s', boxShadow: '0 1px 2px rgba(0,0,0,.25)',
+        }} />
+      </span>
+    </label>
+  );
+}
+
 // Chart color palette for multi-series lines
 const CHART_COLORS = [
   V.gold, V.navy, V.goldLight, '#5B8CB9', V.goldMuted,
@@ -1073,10 +1102,17 @@ function LocationReport({ location, locations, metrics, dailyMetrics, opsData, b
     // KPI calculations — financial metrics use daily data for exact period sums
     const locRev = sumDaily(location, 's');
     const locPt = sumDaily(location, 'p');
-    const locRevPerPt = locPt > 0 ? locRev / locPt : null;
+    // Avg Revenue per Patient uses fee-excluded twins (sx/px) so no-show & cancellation
+    // fees count in neither the numerator nor the denominator. Total Revenue / Unique
+    // Patients keep using s/p.
+    const locRevX = sumDaily(location, 'sx');
+    const locPtX = sumDaily(location, 'px');
+    const locRevPerPt = locPtX > 0 ? locRevX / locPtX : null;
     const peerRev = peers.reduce((s, p) => s + sumDaily(p, 's'), 0);
     const peerPt = peers.reduce((s, p) => s + sumDaily(p, 'p'), 0);
-    const peerRevPerPt = peerPt > 0 ? peerRev / peerPt : null;
+    const peerRevX = peers.reduce((s, p) => s + sumDaily(p, 'sx'), 0);
+    const peerPtX = peers.reduce((s, p) => s + sumDaily(p, 'px'), 0);
+    const peerRevPerPt = peerPtX > 0 ? peerRevX / peerPtX : null;
 
     const locRetail = sumDaily(location, 'rt');
     const locRetailPct = locRev > 0 ? locRetail / locRev * 100 : null;
@@ -1108,6 +1144,14 @@ function LocationReport({ location, locations, metrics, dailyMetrics, opsData, b
 
     const peerColl = peers.reduce((s, p) => s + sumDaily(p, 'co'), 0);
     const peerCollPct = peerRev > 0 ? peerColl / peerRev * 100 : null;
+
+    // True per-location averages for absolute-dollar peer comparisons.
+    // (peerRev / peerColl above are TOTALS — required for the pooled rate metrics —
+    // so the dollar rows divide by the count of peers active in the period.)
+    const peerRevCount = peers.filter(p => sumDaily(p, 's') > 0).length;
+    const peerCollCount = peers.filter(p => sumDaily(p, 'co') > 0).length;
+    const peerAvgRev = peerRevCount > 0 ? peerRev / peerRevCount : null;
+    const peerAvgColl = peerCollCount > 0 ? peerColl / peerCollCount : null;
 
     // Botox units: weighted avg = total_qty / invoice count, using provider-level data
     const locBtxProvRows = (btxProviderData || []).filter(r => r.c === location && periodSet.has(r.w));
@@ -1160,8 +1204,8 @@ function LocationReport({ location, locations, metrics, dailyMetrics, opsData, b
       if (sorted.length < 2) return null;
       const half = Math.ceil(sorted.length / 2);
       const avgRpp = (rows) => {
-        const rev = rows.reduce((s, r) => s + (Number(r.s) || 0), 0);
-        const pts = rows.reduce((s, r) => s + (Number(r.p) || 0), 0);
+        const rev = rows.reduce((s, r) => s + (Number(r.sx) || 0), 0);
+        const pts = rows.reduce((s, r) => s + (Number(r.px) || 0), 0);
         return pts > 0 ? rev / pts : 0;
       };
       const v1 = avgRpp(sorted.slice(0, half));
@@ -1251,6 +1295,9 @@ function LocationReport({ location, locations, metrics, dailyMetrics, opsData, b
 
       const rev = mpRows.reduce((s, r) => s + (Number(r.s) || 0), 0);
       const pt = mpRows.reduce((s, r) => s + (Number(r.p) || 0), 0);
+      // fee-excluded (no-show/cancellation) — used only for Avg Revenue per Patient
+      const revx = mpRows.reduce((s, r) => s + (Number(r.sx) || 0), 0);
+      const ptx = mpRows.reduce((s, r) => s + (Number(r.px) || 0), 0);
       const rt = mpRows.reduce((s, r) => s + (Number(r.rt) || 0), 0);
       const inj = mpRows.reduce((s, r) => s + (Number(r.inj) || 0), 0);
       const coll = rcpRows.reduce((s, r) => s + (Number(r.coll) || 0), 0);
@@ -1269,7 +1316,7 @@ function LocationReport({ location, locations, metrics, dailyMetrics, opsData, b
       return {
         // KPI overrides
         rev, pt, rt, inj, coll,
-        revPerPt: pt > 0 ? rev / pt : null,
+        revPerPt: ptx > 0 ? revx / ptx : null,
         retailPct: rev > 0 ? (rt / rev) * 100 : null,
         injPct: rev > 0 ? (inj / rev) * 100 : null,
         collPct: rev > 0 ? (coll / rev) * 100 : null,
@@ -1381,8 +1428,8 @@ function LocationReport({ location, locations, metrics, dailyMetrics, opsData, b
         ? (() => {
           const vals = peerMpProviders.map(pr => {
             const rows = peerMpRows.filter(r => r.pr === pr);
-            const rev = rows.reduce((s, r) => s + (Number(r.s) || 0), 0);
-            const pt  = rows.reduce((s, r) => s + (Number(r.p) || 0), 0);
+            const rev = rows.reduce((s, r) => s + (Number(r.sx) || 0), 0);
+            const pt  = rows.reduce((s, r) => s + (Number(r.px) || 0), 0);
             return pt > 0 ? rev / pt : null;
           }).filter(v => v != null);
           return vals.length ? vals.reduce((s, v) => s + v, 0) / vals.length : null;
@@ -1438,10 +1485,11 @@ function LocationReport({ location, locations, metrics, dailyMetrics, opsData, b
         const prCollVal = prCollRows.reduce((s, r) => s + (Number(r.coll) || 0), 0);
         const collPct = prRev > 0 ? (prCollVal / prRev) * 100 : null;
 
-        // Avg Rev Per Patient
+        // Avg Rev Per Patient — exclude no-show/cancellation fees (revx/px)
         const prMpRows = (dailyMetricsProviderData || []).filter(r => r.c === location && r.pr === pr && inDateRange(r));
-        const prTotalPt = prMpRows.reduce((s, r) => s + (Number(r.p) || 0), 0);
-        const avgRevPerPt = prTotalPt > 0 ? prRev / prTotalPt : null;
+        const prTotalPtX = prMpRows.reduce((s, r) => s + (Number(r.px) || 0), 0);
+        const prRevX = prCollRows.reduce((s, r) => s + (Number(r.revx) || 0), 0);
+        const avgRevPerPt = prTotalPtX > 0 ? prRevX / prTotalPtX : null;
 
         // Utilization & Rev Per Net Provider Hour — kept weekly (rate metric;
         // weekly bucketing is the natural unit for hours/utilization).
@@ -1597,8 +1645,8 @@ function LocationReport({ location, locations, metrics, dailyMetrics, opsData, b
       locRev, locColl, locRevBudget, locCollBudget, fullMonthRevBudget, fullMonthCollBudget,
       locRevPerPt, locRetailPct, locUtil, locCancelRate, locNoshowRate,
       kpis: [
-        { name: 'Revenue', value: kpiFiltered ? kpiFiltered.rev : locRev, peerAvg: peerRev, goal: kpiFiltered ? null : (locRevBudget || null), format: 'dollar', higherBetter: true, trend: revTrend },
-        { name: 'Collections', value: kpiFiltered ? kpiFiltered.coll : locColl, peerAvg: peerColl, goal: kpiFiltered ? null : (locCollBudget || null), format: 'dollar', higherBetter: true, trend: null },
+        { name: 'Revenue', value: kpiFiltered ? kpiFiltered.rev : locRev, peerAvg: peerAvgRev, goal: kpiFiltered ? null : (locRevBudget || null), format: 'dollar', higherBetter: true, trend: revTrend },
+        { name: 'Collections', value: kpiFiltered ? kpiFiltered.coll : locColl, peerAvg: peerAvgColl, goal: kpiFiltered ? null : (locCollBudget || null), format: 'dollar', higherBetter: true, trend: null },
         { name: 'Avg Revenue Per Patient', value: kpiFiltered ? kpiFiltered.revPerPt : locRevPerPt, peerAvg: peerRevPerPt, goal: 500, format: 'dollar', higherBetter: true, trend: revPerPtTrend },
         { name: 'Retail % of Sales', value: kpiFiltered ? kpiFiltered.retailPct : locRetailPct, peerAvg: peerRetailPct, goal: 7.5, format: 'pct', higherBetter: true, trend: retailPctTrend },
         { name: 'Injectables % of Sales', value: kpiFiltered ? kpiFiltered.injPct : locInjPct, peerAvg: peerInjPct, goal: null, format: 'pct', higherBetter: true, trend: injPctTrend },
@@ -2372,11 +2420,11 @@ export default function PerformanceTracker({ initialLocTypes, initialPractices, 
   const [metrics, setMetrics] = useState([]);
   const [dailyMetrics, setDailyMetrics] = useState([]);
   const [opsData, setOpsData] = useState([]);
-  const [btxData, setBtxData] = useState([]);
+  const [btxDataRaw, setBtxData] = useState([]);
   const [budgetData, setBudgetData] = useState([]);
   const [monthlyBudgetData, setMonthlyBudgetData] = useState([]);
   const [injRevProviderData, setInjRevProviderData] = useState([]);
-  const [btxProviderData, setBtxProviderData] = useState([]);
+  const [btxProviderDataRaw, setBtxProviderData] = useState([]);
   const [ntxFillerData, setNtxFillerData] = useState([]);
   const [syringeLocData, setSyringeLocData] = useState([]);
   const [syringeProvData, setSyringeProvData] = useState([]);
@@ -2394,9 +2442,20 @@ export default function PerformanceTracker({ initialLocTypes, initialPractices, 
   const [dailyInjRevProviderData, setDailyInjRevProviderData] = useState([]);
   const [dailyRevCollProvData, setDailyRevCollProvData] = useState([]);
   const [dailyMetricsProviderData, setDailyMetricsProviderData] = useState([]);
-  const [dailyBtxProviderData, setDailyBtxProviderData] = useState([]);
+  const [dailyBtxProviderDataRaw, setDailyBtxProviderData] = useState([]);
   const [dailySyringeProvData, setDailySyringeProvData] = useState([]);
   const [loading, setLoading] = useState(true);
+
+  // Botox "exclude appointments with < 10 units" — parallel filtered datasets
+  // (`*-ge10.json`) plus a toggle. When ON, every botox chart/KPI/provider card
+  // reads the filtered feed; when OFF, the original deployed feed.
+  const [btxDataGe10, setBtxDataGe10] = useState([]);
+  const [btxProviderDataGe10, setBtxProviderDataGe10] = useState([]);
+  const [dailyBtxProviderDataGe10, setDailyBtxProviderDataGe10] = useState([]);
+  const [excludeBtxUnder10, setExcludeBtxUnder10] = useState(false);
+  const btxData = excludeBtxUnder10 ? btxDataGe10 : btxDataRaw;
+  const btxProviderData = excludeBtxUnder10 ? btxProviderDataGe10 : btxProviderDataRaw;
+  const dailyBtxProviderData = excludeBtxUnder10 ? dailyBtxProviderDataGe10 : dailyBtxProviderDataRaw;
 
   const [selectedLocTypes, setSelectedLocTypes] = useState(initialLocTypes || []);
   const [selectedPractices, setSelectedPractices] = useState(initialPractices || []);
@@ -2499,7 +2558,18 @@ export default function PerformanceTracker({ initialLocTypes, initialPractices, 
       fetch(`${BP}/data/performance/daily-btx-provider.json`).then(r => r.json()).catch(() => []),
       fetch(`${BP}/data/performance/daily-syringe-provider.json`).then(r => r.json()).catch(() => []),
       fetch(`${BP}/data/performance/monthly-budget.json`).then(r => r.json()).catch(() => []),
-    ]).then(([locs, met, daily, ops, btx, bud, injRevProv, btxProv, ntxFiller, syrLoc, syrProv, revCollProv, provHours, utilization, metricsProvData, opsProvData, utilHoursProvData, dailyInjRevProv, dailyRevCollProv, dailyMetricsProv, dailyBtxProv, dailySyrProv, monthlyBud]) => {
+      // Botox "<10 units excluded" parallel feeds (for the toggle)
+      fetch(`${BP}/data/performance/weekly-btx-ge10.json`).then(r => r.json()).catch(() => []),
+      fetch(`${BP}/data/performance/weekly-btx-provider-ge10.json`).then(r => r.json()).catch(() => []),
+      fetch(`${BP}/data/performance/daily-btx-provider-ge10.json`).then(r => r.json()).catch(() => []),
+    ]).then(([locs, met, daily, ops, btx, bud, injRevProv, btxProv, ntxFiller, syrLoc, syrProv, revCollProv, provHours, utilization, metricsProvData, opsProvData, utilHoursProvData, dailyInjRevProv, dailyRevCollProv, dailyMetricsProv, dailyBtxProv, dailySyrProv, monthlyBud, btxGe10, btxProvGe10, dailyBtxProvGe10]) => {
+      // Safety net: Avg Revenue per Patient reads fee/consult/vitamin-excluded twins
+      // (sx/px/revx). If a daily refresh ever regenerates these feeds without the
+      // twins, fall back to the raw fields so the metric degrades gracefully (reverts
+      // to including those visits) instead of going blank.
+      const fillRP = (arr) => { for (const r of (arr || [])) { if (r.sx == null) r.sx = r.s; if (r.px == null) r.px = r.p; } };
+      fillRP(met); fillRP(daily); fillRP(metricsProvData); fillRP(dailyMetricsProv);
+      for (const r of (dailyRevCollProv || [])) { if (r.revx == null) r.revx = r.rev; }
       setLocations(locs);
       setMetrics(met);
       setDailyMetrics(daily);
@@ -2523,6 +2593,9 @@ export default function PerformanceTracker({ initialLocTypes, initialPractices, 
       setDailyMetricsProviderData(dailyMetricsProv);
       setDailyBtxProviderData(dailyBtxProv);
       setDailySyringeProvData(dailySyrProv);
+      setBtxDataGe10(btxGe10);
+      setBtxProviderDataGe10(btxProvGe10);
+      setDailyBtxProviderDataGe10(dailyBtxProvGe10);
       setLoading(false);
       // Mark data as loaded so cleanup effects can run
       // Use a timeout to let the first render with data settle before enabling cleanup
@@ -2816,8 +2889,8 @@ export default function PerformanceTracker({ initialLocTypes, initialPractices, 
           const weekRows = filtered.filter(m => m.w === w);
           selectedProvs.forEach(pr => {
             const provRows = weekRows.filter(m => m.pr === pr);
-            const sales = provRows.reduce((s, m) => s + (m.s || 0), 0);
-            const patients = provRows.reduce((s, m) => s + (m.p || 0), 0);
+            const sales = provRows.reduce((s, m) => s + (m.sx || 0), 0);
+            const patients = provRows.reduce((s, m) => s + (m.px || 0), 0);
             if (patients > 0) row[pr] = +(sales / patients).toFixed(2);
           });
           return row;
@@ -2831,8 +2904,8 @@ export default function PerformanceTracker({ initialLocTypes, initialPractices, 
           const monthRows = filtered.filter(m => m.w.startsWith(mk));
           selectedProvs.forEach(pr => {
             const provRows = monthRows.filter(m => m.pr === pr);
-            const sales = provRows.reduce((s, m) => s + (m.s || 0), 0);
-            const patients = provRows.reduce((s, m) => s + (m.p || 0), 0);
+            const sales = provRows.reduce((s, m) => s + (m.sx || 0), 0);
+            const patients = provRows.reduce((s, m) => s + (m.px || 0), 0);
             if (patients > 0) row[pr] = +(sales / patients).toFixed(2);
           });
           return row;
@@ -2851,12 +2924,12 @@ export default function PerformanceTracker({ initialLocTypes, initialPractices, 
       const weeks = timeRange.periods;
       const data = weeks.map(w => {
         const weekRows = filtered.filter(m => m.w === w);
-        const totalSales = weekRows.reduce((s, m) => s + (m.s || 0), 0);
-        const totalPatients = weekRows.reduce((s, m) => s + (m.p || 0), 0);
+        const totalSales = weekRows.reduce((s, m) => s + (m.sx || 0), 0);
+        const totalPatients = weekRows.reduce((s, m) => s + (m.px || 0), 0);
         const row = { week: formatWeek(w), Total: totalPatients > 0 ? +(totalSales / totalPatients).toFixed(2) : null };
         avgRevLocs.forEach(loc => {
           const m = weekRows.find(r => r.c === loc);
-          if (m && m.p > 0) row[loc] = +(m.s / m.p).toFixed(2);
+          if (m && m.px > 0) row[loc] = +(m.sx / m.px).toFixed(2);
         });
         return row;
       });
@@ -2868,13 +2941,13 @@ export default function PerformanceTracker({ initialLocTypes, initialPractices, 
       const curMonth = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}`;
       const data = months.map(mk => {
         const monthRows = filtered.filter(m => m.w.startsWith(mk));
-        const totalSales = monthRows.reduce((s, m) => s + (m.s || 0), 0);
-        const totalPatients = monthRows.reduce((s, m) => s + (m.p || 0), 0);
+        const totalSales = monthRows.reduce((s, m) => s + (m.sx || 0), 0);
+        const totalPatients = monthRows.reduce((s, m) => s + (m.px || 0), 0);
         const row = { week: formatMonth(mk, mk === curMonth), Total: totalPatients > 0 ? +(totalSales / totalPatients).toFixed(2) : null };
         avgRevLocs.forEach(loc => {
           const locRows = monthRows.filter(r => r.c === loc);
-          const locSales = locRows.reduce((s, m) => s + (m.s || 0), 0);
-          const locPt = locRows.reduce((s, m) => s + (m.p || 0), 0);
+          const locSales = locRows.reduce((s, m) => s + (m.sx || 0), 0);
+          const locPt = locRows.reduce((s, m) => s + (m.px || 0), 0);
           if (locPt > 0) row[loc] = +(locSales / locPt).toFixed(2);
         });
         return row;
@@ -5478,6 +5551,12 @@ export default function PerformanceTracker({ initialLocTypes, initialPractices, 
               tooltip="Average units per unique botox appointment by location"
               headerRight={
                 <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                  <ToggleSwitch
+                    checked={excludeBtxUnder10}
+                    onChange={setExcludeBtxUnder10}
+                    label="Exclude <10u appts"
+                    title="Exclude botox appointments with fewer than 10 units"
+                  />
                   <ChartTimeControl chartId="btxLoc" globalMode={globalTimeMode} globalCount={globalPeriodCount} overrides={chartTimeOverrides} setOverrides={setChartTimeOverrides} />
                   {!isSingleLocation && (<MultiSelectDropdown
                     label="Location"
@@ -5509,6 +5588,12 @@ export default function PerformanceTracker({ initialLocTypes, initialPractices, 
             tooltip="Average botox units per appointment by provider for filtered locations"
             headerRight={hasActiveFilter ?
               <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                <ToggleSwitch
+                  checked={excludeBtxUnder10}
+                  onChange={setExcludeBtxUnder10}
+                  label="Exclude <10u appts"
+                  title="Exclude botox appointments with fewer than 10 units"
+                />
                 <ChartTimeControl chartId="btxProv" globalMode={globalTimeMode} globalCount={globalPeriodCount} overrides={chartTimeOverrides} setOverrides={setChartTimeOverrides} />
                 <MultiSelectDropdown
                   label="Provider"
