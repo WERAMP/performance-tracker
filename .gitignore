@@ -2,3 +2,6 @@ node_modules
 .DS_Store
 *.local
 scripts/.corral-cache
+
+# transient daily query inputs (q1.json..q17.json, q-*.json)
+scripts/q*.json

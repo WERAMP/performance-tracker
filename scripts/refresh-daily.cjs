@@ -447,4 +447,14 @@ for (const r of syrProvRows) {
 }
 replaceDailyWeek('daily-syringe-provider.json', dailySyrProv);
 
+// ── Metric exclusions (fees / consult / GFE / vitamin) + botox <10u feeds ──
+// Re-applies on top of the feeds written above so the exclusions survive every
+// refresh. Inputs are optional (see scripts/SYNC-EXCLUSIONS.md); missing inputs are
+// skipped and the app falls back to raw values, so this can never break the refresh.
+try {
+  require('./apply-exclusions.cjs').run();
+} catch (e) {
+  console.warn('apply-exclusions skipped due to error:', e.message);
+}
+
 console.log('\n=== Done ===');
