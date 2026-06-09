@@ -1,3 +1,14 @@
+# Tracker exclusions — DEPLOYED + durable (status)
+
+> **STATUS: shipped & self-sustaining.** All features below are live (commits
+> `ff96e9f`, `60bace0`) and now reproduced on every daily refresh by
+> `scripts/apply-exclusions.cjs` (hooked into `refresh-daily.cjs`). Operators must
+> run the 5 queries in `scripts/SYNC-EXCLUSIONS.md` as part of the daily pull;
+> if skipped, the app falls back to raw values (no breakage). The sections below
+> are retained as the design record.
+
+---
+
 # Pre-deploy checklist — botox <10u toggle + rev/patient fee exclusion
 
 Two features are staged on **localhost only** (built by editing finished data files).
