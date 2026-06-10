@@ -129,6 +129,47 @@ function run() {
   applyOps('weekly-ops.json', 'q-ops-keep-center.json', r => r.c + '|' + r.w);
   applyOps('weekly-ops-provider.json', 'q-ops-keep-provider.json', r => r.c + '|' + r.pr + '|' + r.w);
 
+  // ── 2b. "Botox 100 Units" (Service) = 100 units: add to UNFILTERED botox feeds ──
+  // q5 sums qty>1, so a 100-unit vial line (qty=1) contributes 0; this adds 100*qty back.
+  // The <10u (ge10) feeds get this via the q-btx-ge10 query formula (section 3), not here.
+  const vial = readInput('q-btx-vial.json'); // [{ c, pr, w, add_qty }]
+  if (vial) {
+    const weeks = new Set(vial.map(r => r.w));
+    const addP = {}, addL = {};
+    for (const r of vial) {
+      const a = num(r.add_qty);
+      if (r.pr) addP[r.c + '|' + r.pr + '|' + r.w] = (addP[r.c + '|' + r.pr + '|' + r.w] || 0) + a;
+      addL[r.c + '|' + r.w] = (addL[r.c + '|' + r.w] || 0) + a;
+    }
+    const newB = {};
+    const wbp = readFeed('weekly-btx-provider.json');
+    for (const r of wbp) {
+      const k = r.c + '|' + r.pr + '|' + r.w;
+      if (weeks.has(r.w) && addP[k] && r.total_qty != null && r.n > 0) {
+        r.total_qty = r2(num(r.total_qty) + addP[k]); r.b = r2(r.total_qty / r.n); newB[k] = r.b;
+      }
+    }
+    writeFeed('weekly-btx-provider.json', wbp);
+    const wb = readFeed('weekly-btx.json');
+    for (const r of wb) {
+      const k = r.c + '|' + r.w;
+      if (weeks.has(r.w) && addL[k] && r.total_qty != null && r.b) {
+        const n = Math.round(r.total_qty / r.b); r.total_qty = r2(num(r.total_qty) + addL[k]);
+        if (n > 0) r.b = r2(r.total_qty / n);
+      }
+    }
+    writeFeed('weekly-btx.json', wb);
+    const dbp = readFeed('daily-btx-provider.json');
+    for (const r of dbp) {
+      const w = mondayOf(r.d), k = r.c + '|' + r.pr + '|' + w;
+      if (weeks.has(w) && addP[k] && newB[k] != null) { r.total_qty = r4(num(r.total_qty || 0) + addP[k] / 7); r.b = newB[k]; }
+    }
+    writeFeed('daily-btx-provider.json', dbp);
+    console.log('  botox 100-unit vials applied for', weeks.size, 'week(s)');
+  } else {
+    console.warn('  [skip] q-btx-vial.json missing — "Botox 100 Units" not added to unfiltered feeds');
+  }
+
   // ── 3. Botox <10u feeds (*-ge10) ────────────────────────────────────────────
   const ge = readInput('q-btx-ge10.json');
   if (ge) {

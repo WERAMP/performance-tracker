@@ -72,21 +72,37 @@ Same as #3 but add `MAX(therapist_first_name || ' ' || therapist_last_name) AS p
 group the outer query by `c, pr, w`, and `WHERE pr IS NOT NULL`.
 
 ## 5 → `scripts/q-btx-ge10.json`  `[{c,pr,w,n,total_qty}]`
+Unit rule: a "Botox/Xeomin 100 Units" service line (qty=1 = one 100u vial) counts as
+`100 * qty`; every other line counts its `qty` when `> 1` (qty=1 booking lines = 0).
 ```sql
 WITH ip AS (
   SELECT center_name AS c, DATE_TRUNC('week', DATE(sale_date))::date AS w,
          invoice_id, COALESCE(serviced_by, sold_by) AS pr,
-         SUM(CASE WHEN qty > 1 THEN qty ELSE 0 END) AS units
+         SUM(CASE WHEN item_name ILIKE '%100 unit%' THEN 100*qty WHEN qty > 1 THEN qty ELSE 0 END) AS units
   FROM use_dataset(1237)
   WHERE item_sub_category='Neuromodulators' AND item_type='Service'
     AND item_name NOT ILIKE '%cancellation%'
     AND item_name NOT ILIKE '%no show%' AND item_name NOT ILIKE '%no-show%'
     AND DATE(sale_date) >= DATE_TRUNC('week', CURRENT_DATE) - INTERVAL '4 weeks'
   GROUP BY 1,2,3,4
-  HAVING SUM(CASE WHEN qty > 1 THEN qty ELSE 0 END) >= 10
+  HAVING SUM(CASE WHEN item_name ILIKE '%100 unit%' THEN 100*qty WHEN qty > 1 THEN qty ELSE 0 END) >= 10
 )
 SELECT c, pr, w::text AS w, COUNT(*) AS n, SUM(units) AS total_qty
 FROM ip WHERE pr IS NOT NULL GROUP BY c, pr, w ORDER BY c, w, pr;
+```
+
+## 6 → `scripts/q-btx-vial.json`  `[{c,pr,w,add_qty}]`
+Adds "Botox/Xeomin 100 Units" (Service) as 100 units to the **unfiltered** botox feeds
+(q5 sums qty>1, so the qty=1 vial line otherwise contributes 0). `n` is unchanged.
+```sql
+SELECT center_name AS c, COALESCE(serviced_by, sold_by) AS pr,
+       DATE_TRUNC('week', DATE(sale_date))::date::text AS w,
+       SUM(qty) * 100 AS add_qty
+FROM use_dataset(1237)
+WHERE item_sub_category='Neuromodulators' AND item_type='Service'
+  AND item_name ILIKE '%100 unit%'
+  AND DATE(sale_date) >= DATE_TRUNC('week', CURRENT_DATE) - INTERVAL '4 weeks'
+GROUP BY 1,2,3 ORDER BY 1,3,2;
 ```
 
 ---
