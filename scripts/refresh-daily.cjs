@@ -19,6 +19,18 @@
 //   q16.json — Q16 location-level service hours + net scheduled hours (utilization)
 //   q17.json — Q17 provider-level service hours + net scheduled hours (utilization)
 //
+//   --- Metric-exclusion inputs (REQUIRED — see scripts/SYNC-EXCLUSIONS.md) ---
+//   These drive apply-exclusions.cjs (rev/patient fee+consult+vitamin exclusion,
+//   cancel/no-show consult/wellness exclusion, botox <10u feeds, 100-unit vials).
+//   The refresh ABORTS if any are missing so the exclusions are never silently
+//   dropped. A genuinely empty result is fine — just save an empty file `[]`.
+//   q-revpat-center.json    — fees+consult+vitamin adj by center-week
+//   q-revpat-provider.json  — same by provider-week
+//   q-ops-keep-center.json  — consult/wellness-excluded appt counts by center-week
+//   q-ops-keep-provider.json— same by provider-week
+//   q-btx-ge10.json         — botox appts >=10 units by provider-week
+//   q-btx-vial.json         — "Botox 100 Units" (Service) add by provider-week
+//
 // NOTE: No q2.json — weekly co is derived from q9 daily data for accuracy.
 
 const fs = require('fs');
@@ -131,6 +143,15 @@ const REQUIRED_INPUTS = [
   { f: 'q14.json', allowEmpty: false,         desc: 'Provider ops rates (dataset 754 — must have data)' },
   { f: 'q16.json', allowEmpty: earlyMonday,   desc: 'Location utilization' },
   { f: 'q17.json', allowEmpty: earlyMonday,   desc: 'Provider utilization' },
+  // Metric-exclusion inputs — REQUIRED so exclusions are never silently dropped.
+  // allowEmpty: file must EXIST (proves the query was run); an empty [] is OK.
+  // See scripts/SYNC-EXCLUSIONS.md for the queries.
+  { f: 'q-revpat-center.json',    allowEmpty: true, desc: 'Rev/patient fee+consult+vitamin adj by center (SYNC-EXCLUSIONS.md #1)' },
+  { f: 'q-revpat-provider.json',  allowEmpty: true, desc: 'Rev/patient adj by provider (SYNC-EXCLUSIONS.md #2)' },
+  { f: 'q-ops-keep-center.json',  allowEmpty: true, desc: 'Cancel/no-show consult/wellness-excluded counts by center (SYNC-EXCLUSIONS.md #3)' },
+  { f: 'q-ops-keep-provider.json',allowEmpty: true, desc: 'Cancel/no-show counts by provider (SYNC-EXCLUSIONS.md #4)' },
+  { f: 'q-btx-ge10.json',         allowEmpty: true, desc: 'Botox >=10u appts by provider (SYNC-EXCLUSIONS.md #5)' },
+  { f: 'q-btx-vial.json',         allowEmpty: true, desc: '"Botox 100 Units" vial add by provider (SYNC-EXCLUSIONS.md #6)' },
 ];
 
 (function validateInputs() {

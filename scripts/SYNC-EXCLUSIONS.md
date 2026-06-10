@@ -10,10 +10,11 @@ It re-applies the metric exclusions so they survive every refresh:
 - **Botox "Exclude <10u"** rebuilds the `*-btx*-ge10` feeds (units = `SUM(qty>1)`, keep
   appointments with `>= 10` units).
 
-To feed it, run these 5 queries against Corral (customer **`amp-organization`**) as part
-of the daily pull and save each raw result to the path shown. All inputs are **optional** —
-if one is missing, that part is skipped and the app falls back to raw values (it can't
-break the refresh). Each query pulls a rolling 5-week window (self-heals recent weeks);
+To feed it, run these 6 queries against Corral (customer **`amp-organization`**) as part
+of the daily pull and save each raw result to the path shown. **These are REQUIRED:**
+`refresh-daily.cjs` aborts (before writing any data) if any is missing or not refreshed
+today, so the exclusions can never be silently dropped. A genuinely empty result is fine —
+just save `[]`. Each query pulls a rolling 5-week window (self-heals recent weeks);
 older weeks keep the values from prior runs.
 
 > Large results auto-save to a `…/tool-results/…txt` file — copy its `.data` array to the
