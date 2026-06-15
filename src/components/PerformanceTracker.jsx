@@ -2452,7 +2452,13 @@ export default function PerformanceTracker({ initialLocTypes, initialPractices, 
   const [btxDataGe10, setBtxDataGe10] = useState([]);
   const [btxProviderDataGe10, setBtxProviderDataGe10] = useState([]);
   const [dailyBtxProviderDataGe10, setDailyBtxProviderDataGe10] = useState([]);
-  const [excludeBtxUnder10, setExcludeBtxUnder10] = useState(false);
+  // Default ON: the botox metric counts only appointments with >= 10 units
+  // (sub-10-unit visits — touch-ups, vial-only, etc. — are excluded by default).
+  // The toggle still lets a user include them.
+  // Default ON: the botox metric counts only appointments with >= 10 units
+  // (sub-10-unit visits — touch-ups, vial-only, etc. — are excluded by default).
+  // The toggle still lets a user include them.
+  const [excludeBtxUnder10, setExcludeBtxUnder10] = useState(true);
   const btxData = excludeBtxUnder10 ? btxDataGe10 : btxDataRaw;
   const btxProviderData = excludeBtxUnder10 ? btxProviderDataGe10 : btxProviderDataRaw;
   const dailyBtxProviderData = excludeBtxUnder10 ? dailyBtxProviderDataGe10 : dailyBtxProviderDataRaw;
