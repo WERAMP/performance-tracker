@@ -4977,8 +4977,8 @@ export default function PerformanceTracker({ initialLocTypes, initialPractices, 
         </div>
         <div style={{ display: sectionsMinimized.section2 ? 'none' : 'block' }}>
 
-        {/* Revenue Per Net Provider Hour */}
-        <div style={{ marginBottom: 24 }}>
+        {/* Row 1: Revenue Per Net Provider Hour + Avg Revenue Per Patient */}
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 24, marginBottom: 24 }}>
           <ChartCard
             title="Revenue Per Net Provider Hour"
             tooltip="Revenue divided by net provider hours worked per week"
@@ -5011,10 +5011,6 @@ export default function PerformanceTracker({ initialLocTypes, initialPractices, 
               rightAxisSeries={[]}
             />
           </ChartCard>
-        </div>
-
-        {/* Avg Rev Per Patient */}
-        <div style={{ marginBottom: 24 }}>
           <ChartCard
             title="Avg Revenue Per Patient"
             tooltip="Average revenue per unique patient visit by location"
@@ -5049,43 +5045,75 @@ export default function PerformanceTracker({ initialLocTypes, initialPractices, 
           </ChartCard>
         </div>
 
-        {/* Retail % */}
-        <div style={{ marginBottom: 24 }}>
+        {/* Row 2: Utilization Rate + Net Provider Hours */}
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 24, marginBottom: 24 }}>
           <ChartCard
-            title="Retail Sales as % of Total Sales"
-            tooltip="Retail revenue as a percentage of total location revenue. Goal: >7.5%"
+            title="Utilization Rate"
+            tooltip="Average provider utilization rate (booked hours / scheduled hours). Goal: >70%"
             headerRight={
               <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-                <ChartTimeControl chartId="retailPct" globalMode={globalTimeMode} globalCount={globalPeriodCount} overrides={chartTimeOverrides} setOverrides={setChartTimeOverrides} />
+                <ChartTimeControl chartId="utilization" globalMode={globalTimeMode} globalCount={globalPeriodCount} overrides={chartTimeOverrides} setOverrides={setChartTimeOverrides} />
                 {!isSingleLocation && (<MultiSelectDropdown
                   label="Location"
                   options={['Total', ...locationNames]}
-                  selected={retailPctLocs}
-                  onChange={setRetailPctLocs}
+                  selected={utilizationLocs}
+                  onChange={setUtilizationLocs}
                   minWidth={85}
                 />)}
                 {isSingleLocation && availableInjProviders.length > 0 && (<MultiSelectDropdown
                   label="Provider"
                   options={availableInjProviders}
-                  selected={retailPctProviders || availableInjProviders}
-                  onChange={setRetailPctProviders}
+                  selected={utilProviders || availableInjProviders}
+                  onChange={setUtilProviders}
                   minWidth={85}
                 />)}
               </div>
             }
           >
             <MultiLineChart
-              data={retailPctData}
-              series={retailPctSeries}
+              data={utilizationChartData}
+              series={utilizationSeries}
               height={300}
               formatter={fmtPct}
-              colorMap={retailPctIsProviderMode ? providerColorMap : { Total: V.gold, ...locationColorMap }}
-              rightAxisSeries={retailPctIsProviderMode ? [] : retailPctLocs.filter(n => n !== 'Total')}
+              colorMap={utilizationIsProviderMode ? providerColorMap : { Total: V.gold, ...locationColorMap }}
+              rightAxisSeries={utilizationIsProviderMode ? [] : utilizationLocs.filter(n => n !== TOTAL)}
+            />
+          </ChartCard>
+          <ChartCard
+            title="Net Provider Hours"
+            tooltip="Total net scheduled provider hours (scheduled hours minus blockout hours) by location per week"
+            headerRight={
+              <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                <ChartTimeControl chartId="netHours" globalMode={globalTimeMode} globalCount={globalPeriodCount} overrides={chartTimeOverrides} setOverrides={setChartTimeOverrides} />
+                {!isSingleLocation && (<MultiSelectDropdown
+                  label="Location"
+                  options={['Total', ...locationNames]}
+                  selected={netHoursLocs}
+                  onChange={setNetHoursLocs}
+                  minWidth={85}
+                />)}
+                {isSingleLocation && availableInjProviders.length > 0 && (<MultiSelectDropdown
+                  label="Provider"
+                  options={availableInjProviders}
+                  selected={hoursProviders || availableInjProviders}
+                  onChange={setHoursProviders}
+                  minWidth={85}
+                />)}
+              </div>
+            }
+          >
+            <MultiLineChart
+              data={netHoursChartData}
+              series={netHoursSeries}
+              height={300}
+              formatter={(v) => v != null ? `${v.toLocaleString()} hrs` : ''}
+              colorMap={netHoursIsProviderMode ? providerColorMap : { Total: V.gold, ...locationColorMap }}
+              rightAxisSeries={netHoursIsProviderMode ? [] : netHoursLocs.filter(n => n !== TOTAL)}
             />
           </ChartCard>
         </div>
 
-        {/* Cancellation + No-Show */}
+        {/* Row 3: Patient Cancellation Rate + Patient No-Show Rate */}
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 24, marginBottom: 24 }}>
           <ChartCard
             title="Patient Cancellation Rate"
@@ -5153,70 +5181,38 @@ export default function PerformanceTracker({ initialLocTypes, initialPractices, 
           </ChartCard>
         </div>
 
-        {/* Utilization + Net Provider Hours */}
+        {/* Row 4: Retail Sales as % of Total Sales */}
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 24, marginBottom: 24 }}>
           <ChartCard
-            title="Utilization Rate"
-            tooltip="Average provider utilization rate (booked hours / scheduled hours). Goal: >70%"
+            title="Retail Sales as % of Total Sales"
+            tooltip="Retail revenue as a percentage of total location revenue. Goal: >7.5%"
             headerRight={
               <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-                <ChartTimeControl chartId="utilization" globalMode={globalTimeMode} globalCount={globalPeriodCount} overrides={chartTimeOverrides} setOverrides={setChartTimeOverrides} />
+                <ChartTimeControl chartId="retailPct" globalMode={globalTimeMode} globalCount={globalPeriodCount} overrides={chartTimeOverrides} setOverrides={setChartTimeOverrides} />
                 {!isSingleLocation && (<MultiSelectDropdown
                   label="Location"
                   options={['Total', ...locationNames]}
-                  selected={utilizationLocs}
-                  onChange={setUtilizationLocs}
+                  selected={retailPctLocs}
+                  onChange={setRetailPctLocs}
                   minWidth={85}
                 />)}
                 {isSingleLocation && availableInjProviders.length > 0 && (<MultiSelectDropdown
                   label="Provider"
                   options={availableInjProviders}
-                  selected={utilProviders || availableInjProviders}
-                  onChange={setUtilProviders}
+                  selected={retailPctProviders || availableInjProviders}
+                  onChange={setRetailPctProviders}
                   minWidth={85}
                 />)}
               </div>
             }
           >
             <MultiLineChart
-              data={utilizationChartData}
-              series={utilizationSeries}
+              data={retailPctData}
+              series={retailPctSeries}
               height={300}
               formatter={fmtPct}
-              colorMap={utilizationIsProviderMode ? providerColorMap : { Total: V.gold, ...locationColorMap }}
-              rightAxisSeries={utilizationIsProviderMode ? [] : utilizationLocs.filter(n => n !== TOTAL)}
-            />
-          </ChartCard>
-          <ChartCard
-            title="Net Provider Hours"
-            tooltip="Total net scheduled provider hours (scheduled hours minus blockout hours) by location per week"
-            headerRight={
-              <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-                <ChartTimeControl chartId="netHours" globalMode={globalTimeMode} globalCount={globalPeriodCount} overrides={chartTimeOverrides} setOverrides={setChartTimeOverrides} />
-                {!isSingleLocation && (<MultiSelectDropdown
-                  label="Location"
-                  options={['Total', ...locationNames]}
-                  selected={netHoursLocs}
-                  onChange={setNetHoursLocs}
-                  minWidth={85}
-                />)}
-                {isSingleLocation && availableInjProviders.length > 0 && (<MultiSelectDropdown
-                  label="Provider"
-                  options={availableInjProviders}
-                  selected={hoursProviders || availableInjProviders}
-                  onChange={setHoursProviders}
-                  minWidth={85}
-                />)}
-              </div>
-            }
-          >
-            <MultiLineChart
-              data={netHoursChartData}
-              series={netHoursSeries}
-              height={300}
-              formatter={(v) => v != null ? `${v.toLocaleString()} hrs` : ''}
-              colorMap={netHoursIsProviderMode ? providerColorMap : { Total: V.gold, ...locationColorMap }}
-              rightAxisSeries={netHoursIsProviderMode ? [] : netHoursLocs.filter(n => n !== TOTAL)}
+              colorMap={retailPctIsProviderMode ? providerColorMap : { Total: V.gold, ...locationColorMap }}
+              rightAxisSeries={retailPctIsProviderMode ? [] : retailPctLocs.filter(n => n !== 'Total')}
             />
           </ChartCard>
         </div>
