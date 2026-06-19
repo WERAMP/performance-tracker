@@ -1,4 +1,5 @@
 import React, { useState, useMemo, useEffect, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import {
   LineChart, Line, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip,
   Legend, ResponsiveContainer, ComposedChart, Area, LabelList
@@ -449,6 +450,106 @@ function ChartCard({ title, tooltip, children, width = '100%', height, headerRig
       </div>
       {children}
     </div>
+  );
+}
+
+// Central metric definitions — what each metric shows and how it is calculated.
+// Keyed by the exact label string used in the UI (shared where labels match).
+const METRIC_INFO = {
+  // ── Header summary cards ──
+  'Sales': 'Total service + product sales for the location over the selected period, excluding tax (sum of sales_exc_tax). Memberships, packages and gift cards are excluded — membership revenue is counted when it is redeemed as a service.',
+  'Collections': 'Cash actually collected over the period (payments received), regardless of when the item was sold.',
+  'Rev / Patient': 'Average revenue per unique patient, excluding no-show/cancellation fees = fee-excluded sales ÷ unique patients.',
+  'Utilization': 'Share of providers’ bookable hours that were booked = booked hours ÷ available hours, averaged across weeks (zero-utilization weeks excluded).',
+  'Cancel + NS': 'Combined cancellation + no-show rate = (% of appointments cancelled) + (% no-show), weighted by appointment count.',
+  'Retail %': 'Retail (product) sales as a share of total sales = retail sales ÷ total sales × 100.',
+  // ── Section A: KPI Scorecard ──
+  'Revenue': 'Total service + product sales for the period, excluding tax (sum of sales_exc_tax). Memberships, packages and gift cards are excluded — membership revenue is counted when it is redeemed as a service.',
+  'Avg Revenue Per Patient': 'Average revenue per unique patient, excluding no-show/cancellation fees = fee-excluded sales ÷ unique patients.',
+  'Retail % of Sales': 'Retail (product) sales as a share of total sales = retail sales ÷ total sales × 100. Products are credited to the seller (sold_by).',
+  'Injectables % of Sales': 'Injectable sales as a share of total sales = injectables revenue ÷ total sales × 100 (uses the canonical injectables definition).',
+  'Collections % of Revenue': 'Cash collected as a share of revenue billed = collections ÷ revenue × 100. Under 100% indicates outstanding/uncollected balances.',
+  'Avg Botox Units': 'Average neurotoxin units per Botox appointment = total units ÷ number of Botox appointments (≥10-unit appointments).',
+  'Avg Syringes / Filler Appt': 'Average filler syringes per filler appointment = total syringes ÷ filler appointments.',
+  'Cancellation Rate': 'Share of appointments that were cancelled, weighted across weeks by appointment count.',
+  'No-Show Rate': 'Share of appointments where the patient did not show, weighted across weeks by appointment count.',
+  'Utilization Rate': 'Share of providers’ bookable hours that were booked = booked ÷ available hours, averaged across weeks.',
+  'Avg Weekly Patients': 'Average number of unique patients seen per week over the period.',
+  // ── Section B: Revenue & Efficiency ──
+  'Revenue Per Net Provider Hour': 'Revenue ÷ net (worked) provider hours.',
+  'Collections Per Net Provider Hour': 'Collections ÷ net (worked) provider hours.',
+  'Avg Net Provider Hours/Week': 'Average net (worked) provider hours per week.',
+  // ── Section C: Provider Performance cards ──
+  'Total Revenue': 'This provider’s total revenue (all categories) over the period; products are credited to the seller (sold_by).',
+  'Inj Revenue': 'This provider’s injectable revenue (canonical injectables definition), credited to the servicing provider.',
+  'Avg Syr/Inj Appt': 'Average syringes per injectable appointment for this provider.',
+  'Avg Syr/Filler Appt': 'Average syringes per filler appointment for this provider.',
+  'Collections %': 'This provider’s collections ÷ revenue × 100.',
+  'Avg Rev Per Patient': 'This provider’s fee-excluded revenue ÷ unique patients.',
+  'Rev Per Net Hr': 'This provider’s revenue ÷ net (worked) hours.',
+  // ── Section E: Provider Productivity (explorer KPIs + charts) ──
+  'Neuro Units (Botox-Equiv)': 'Total neurotoxin units converted to Botox-equivalent (Dysport/Daxxify converted by each location’s vial ratio; Botox/Xeomin/Jeuveau count 1:1).',
+  'Filler Syringes': 'Total filler syringes sold (Dermal + Biostimulator filler).',
+  'Neuro Units / Visit': 'Botox-equivalent neurotoxin units ÷ injectable visits (unique injectable invoices).',
+  'Filler Syr / Visit': 'Filler syringes ÷ injectable visits (unique injectable invoices).',
+  'Filler % of Inj': 'Filler sales as a share of total injectable sales × 100.',
+  'Filler Revenue': 'Total filler revenue (sales_exc_tax for filler sub-categories).',
+  'Neurotoxin Revenue': 'Total neurotoxin revenue (sales_exc_tax for neuromodulator products).',
+  'Total Injectables Sales': 'Filler revenue + neurotoxin revenue.',
+  'Multi-Syringe Appts (3+)': 'Count of filler appointments with 3 or more syringes (3 + 4 + 5+ syringe buckets combined).',
+  'Rev / Utilized Hour': 'Service sales ÷ utilized (booked) hours. Practice-level — provider schedules are not center-specific.',
+  'Avg Rev / Visit': 'Revenue ÷ unique visits, excluding consult-only and touch-up-only visits.',
+  // ── Units tables ──
+  'Botox Units': 'Neurotoxin units in Botox-equivalent for the period.',
+};
+
+// Module-level tooltip store. The popover is rendered ONCE by <TooltipHost/> at the
+// app root, so it survives re-mounts of any InfoIcon (e.g. icons inside nested
+// components like ComparisonBar / Section-E ChartCard that React recreates on each
+// parent render). InfoIcon only fires show/hide — it holds no popover state itself.
+let _tipState = null; // { text, x, y } or null
+const _tipSubs = new Set();
+function setTip(next) { _tipState = next; _tipSubs.forEach((fn) => fn(next)); }
+function TooltipHost() {
+  const [tip, setT] = useState(null);
+  useEffect(() => { _tipSubs.add(setT); return () => { _tipSubs.delete(setT); }; }, []);
+  if (!tip) return null;
+  return createPortal(
+    <div style={{
+      position: 'fixed', left: tip.x, top: tip.y, transform: 'translateX(-50%)',
+      maxWidth: 300, width: 'max-content', background: V.navy, color: V.cream,
+      fontFamily: FONT.body, fontSize: 11, fontWeight: 400, lineHeight: 1.45,
+      padding: '8px 11px', borderRadius: 6, boxShadow: '0 6px 22px rgba(4,30,66,0.35)',
+      zIndex: 99999, pointerEvents: 'none', whiteSpace: 'normal', textAlign: 'left',
+    }}>{tip.text}</div>,
+    document.body
+  );
+}
+
+// Small circled "i" that shows a hover tooltip explaining a metric. Pass `text`
+// directly or `k` to look up METRIC_INFO. Renders nothing if no definition exists.
+function InfoIcon({ text, k, ml = 5, color }) {
+  const t = text || (k != null ? METRIC_INFO[k] : null);
+  if (!t) return null;
+  const c = color || V.gray;
+  const open = (e) => {
+    const r = e.currentTarget.getBoundingClientRect();
+    const x = Math.min(Math.max(r.left + r.width / 2, 150), window.innerWidth - 150);
+    setTip({ text: t, x, y: r.bottom + 6 });
+  };
+  const close = () => setTip(null);
+  return (
+    <span
+      onMouseEnter={open} onMouseLeave={close}
+      onClick={(e) => { e.stopPropagation(); _tipState ? close() : open(e); }}
+      role="img" aria-label={`What is this? ${t}`}
+      style={{
+        display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+        width: 14, height: 14, marginLeft: ml, borderRadius: '50%', flexShrink: 0,
+        border: `1px solid ${c}`, color: c, fontSize: 9, fontWeight: 700,
+        fontFamily: FONT.body, lineHeight: 1, cursor: 'help', verticalAlign: 'middle',
+      }}
+    >i</span>
   );
 }
 
@@ -1055,9 +1156,9 @@ function CommercialTrends({ location, grain, providers, monthly, weekly, daily, 
   const rhPeriods = [...new Set(rhRows.map(r => r.p))].sort().filter(p => !periods.length || p >= periods[0]);
 
   const mk = (fn) => periods.map(p => ({ week: periodLabel(p), ...fn(p) }));
-  const ChartCard = ({ title, children }) => (
+  const ChartCard = ({ title, info, children }) => (
     <div style={{ background: V.white, border: `1px solid ${V.taupe}`, borderRadius: 8, padding: '14px 16px', marginBottom: 14 }}>
-      <div style={{ fontFamily: FONT.body, fontSize: 12, fontWeight: 700, color: V.navy, marginBottom: 8 }}>{title}</div>
+      <div style={{ fontFamily: FONT.body, fontSize: 12, fontWeight: 700, color: V.navy, marginBottom: 8, display: 'flex', alignItems: 'center' }}>{title}<InfoIcon text={info} /></div>
       {children}
     </div>
   );
@@ -1145,6 +1246,7 @@ function CommercialTrends({ location, grain, providers, monthly, weekly, daily, 
               <select value={curKpi.key} onChange={(e) => setSelKpi(e.target.value)} style={selectStyle}>
                 {KPIS.map(k => <option key={k.key} value={k.key}>{k.key}</option>)}
               </select>
+              <InfoIcon k={curKpi.key} />
             </div>
             <div style={{ overflowX: 'auto' }}>
               <table style={{ borderCollapse: 'collapse', width: '100%' }}>
@@ -1181,7 +1283,7 @@ function CommercialTrends({ location, grain, providers, monthly, weekly, daily, 
                 <tbody>
                   {KPIS.map((k, i) => (
                     <tr key={k.key} style={{ background: i % 2 ? V.cream : V.white }}>
-                      <td style={{ ...tTd0, background: i % 2 ? V.cream : V.white }}>{k.key}</td>
+                      <td style={{ ...tTd0, background: i % 2 ? V.cream : V.white }}><span style={{ display: 'inline-flex', alignItems: 'center' }}>{k.key}<InfoIcon k={k.key} /></span></td>
                       {periods.map(p => <td key={p} style={tTd}>{curProv ? cellFor(curProv, k, p) : '—'}</td>)}
                     </tr>
                   ))}
@@ -1220,44 +1322,45 @@ function CommercialTrends({ location, grain, providers, monthly, weekly, daily, 
         })}
       </div>
 
-      <ChartCard title={`Total Neurotoxin Units (Botox-Equivalent) & Filler Syringes — ${grainWord}`}>
+      <ChartCard title={`Total Neurotoxin Units (Botox-Equivalent) & Filler Syringes — ${grainWord}`} info={`${METRIC_INFO['Neuro Units (Botox-Equiv)']} Filler Syringes = total filler syringes sold (Dermal + Biostimulator).`}>
         <CommChart data={mk(p => ({ 'Neurotoxin Units (Botox-Equiv)': Math.round(neuroTotal(p)), 'Filler Syringes': Math.round(agg[p].fillerSyr) }))}
           series={['Neurotoxin Units (Botox-Equiv)', 'Filler Syringes']} rightAxisSeries={['Filler Syringes']}
           formatter={fmtNum} rightAxisFormatter={fmtNum} colorMap={dualColor} />
       </ChartCard>
 
-      <ChartCard title={`Neurotoxin Units (Botox-Equiv) per Injectables Visit & Filler Syringes per Injectables Visit — ${grainWord}`}>
+      <ChartCard title={`Neurotoxin Units (Botox-Equiv) per Injectables Visit & Filler Syringes per Injectables Visit — ${grainWord}`} info={`${METRIC_INFO['Neuro Units / Visit']} Filler Syringes / Visit = filler syringes ÷ injectable visits.`}>
         <CommChart data={mk(p => ({ 'Neuro Units / Inj. Visit': agg[p].injVisits > 0 ? Math.round(neuroTotal(p) / agg[p].injVisits * 10) / 10 : 0, 'Filler Syringes / Inj. Visit': agg[p].injVisits > 0 ? Math.round(agg[p].fillerSyr / agg[p].injVisits * 100) / 100 : 0 }))}
           series={['Neuro Units / Inj. Visit', 'Filler Syringes / Inj. Visit']} rightAxisSeries={['Filler Syringes / Inj. Visit']}
           formatter={fmtNum1} rightAxisFormatter={fmtNum2} colorMap={perVisitColor} />
       </ChartCard>
 
-      <ChartCard title={`Filler Sales as % of All Injectables Sales — ${grainWord}`}>
+      <ChartCard title={`Filler Sales as % of All Injectables Sales — ${grainWord}`} info={METRIC_INFO['Filler % of Inj']}>
         <CommChart data={mk(p => ({ 'Filler % of Injectables': agg[p].totalInj > 0 ? Math.round(agg[p].fillerSales / agg[p].totalInj * 1000) / 10 : 0 }))}
           series={['Filler % of Injectables']} fillSeries={['Filler % of Injectables']} formatter={fmtPct1} colorMap={{ 'Filler % of Injectables': V.gold }} />
       </ChartCard>
 
-      <ChartCard title={`Total Filler Revenue by ${periodWord}`}>
+      <ChartCard title={`Total Filler Revenue by ${periodWord}`} info={METRIC_INFO['Filler Revenue']}>
         <CommChart data={mk(p => ({ 'Filler Revenue': Math.round(agg[p].fillerSales) }))} series={['Filler Revenue']} fillSeries={['Filler Revenue']} formatter={fmtMoney} colorMap={{ 'Filler Revenue': V.gold }} />
       </ChartCard>
 
-      <ChartCard title={`Total Neurotoxin Revenue by ${periodWord}`}>
+      <ChartCard title={`Total Neurotoxin Revenue by ${periodWord}`} info={METRIC_INFO['Neurotoxin Revenue']}>
         <CommChart data={mk(p => ({ 'Neurotoxin Revenue': Math.round(agg[p].neuroRev) }))} series={['Neurotoxin Revenue']} fillSeries={['Neurotoxin Revenue']} formatter={fmtMoney} colorMap={{ 'Neurotoxin Revenue': V.navy }} />
       </ChartCard>
 
-      <ChartCard title={`Total Injectables Sales by ${periodWord}`}>
+      <ChartCard title={`Total Injectables Sales by ${periodWord}`} info={METRIC_INFO['Total Injectables Sales']}>
         <CommChart data={mk(p => ({ 'Total Injectables Sales': Math.round(agg[p].fillerSales + agg[p].neuroRev) }))} series={['Total Injectables Sales']} fillSeries={['Total Injectables Sales']} formatter={fmtMoney} colorMap={{ 'Total Injectables Sales': V.green }} />
       </ChartCard>
 
-      <ChartCard title={`Multisyringe Filler Appointments by ${periodWord}`}>
+      <ChartCard title={`Multisyringe Filler Appointments by ${periodWord}`} info="Number of filler appointments by syringe count — separate lines for appointments with exactly 3, exactly 4, and 5 or more syringes.">
+
         <CommChart data={mk(p => ({ '3 Syringes': agg[p].a3, '4 Syringes': agg[p].a4, '5+ Syringes': agg[p].a5 }))} series={['3 Syringes', '4 Syringes', '5+ Syringes']} formatter={fmtNum} colorMap={multiColor} />
       </ChartCard>
 
-      <ChartCard title={`Revenue per Utilized Hour — ${grainWord}`}>
+      <ChartCard title={`Revenue per Utilized Hour — ${grainWord}`} info={METRIC_INFO['Rev / Utilized Hour']}>
         <CommChart data={rhPeriods.map(p => ({ week: periodLabel(p), 'Rev / Utilized Hour': rhAgg[p].hours > 0 ? Math.round(rhAgg[p].sales / rhAgg[p].hours) : 0 }))} series={['Rev / Utilized Hour']} fillSeries={['Rev / Utilized Hour']} formatter={fmtMoney} colorMap={{ 'Rev / Utilized Hour': V.navy }} note={practice ? `Practice-level (${practice}); employee schedules are not center-specific` : null} />
       </ChartCard>
 
-      <ChartCard title={`Avg Rev / Visit — ${grainWord}`}>
+      <ChartCard title={`Avg Rev / Visit — ${grainWord}`} info={METRIC_INFO['Avg Rev / Visit']}>
         <CommChart data={mk(p => ({ 'Avg Rev / Visit': agg[p].trendVisits > 0 ? Math.round(agg[p].trendSales / agg[p].trendVisits) : 0 }))} series={['Avg Rev / Visit']} fillSeries={['Avg Rev / Visit']} formatter={fmtMoney} colorMap={{ 'Avg Rev / Visit': V.gold }} note="Excludes consult-only & touch-up-only visits" />
       </ChartCard>
     </div>
@@ -1272,7 +1375,9 @@ function UnitsTable({ title, rows, periodKey, periodHead, fmtPeriod, botoxKey, f
         <thead>
           <tr style={{ borderBottom: `2px solid ${V.navy}` }}>
             {[periodHead, 'Provider', 'Botox Units', 'Filler Syringes'].map((h, i) => (
-              <th key={h} style={{ padding: '7px 10px', textAlign: i < 2 ? 'left' : 'right', fontSize: 9, fontWeight: 700, color: V.gold, letterSpacing: 1, textTransform: 'uppercase' }}>{h}</th>
+              <th key={h} style={{ padding: '7px 10px', textAlign: i < 2 ? 'left' : 'right', fontSize: 9, fontWeight: 700, color: V.gold, letterSpacing: 1, textTransform: 'uppercase' }}>
+                <span style={{ display: 'inline-flex', alignItems: 'center', justifyContent: i < 2 ? 'flex-start' : 'flex-end' }}>{h}<InfoIcon k={h} /></span>
+              </th>
             ))}
           </tr>
         </thead>
@@ -2187,7 +2292,7 @@ function LocationReport({ location, locations, metrics, dailyMetrics, opsData, b
     return (
       <div style={{ marginBottom: 14 }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
-          <span style={{ fontSize: 11, fontFamily: FONT.body, fontWeight: 600, color: V.dark }}>{label}</span>
+          <span style={{ fontSize: 11, fontFamily: FONT.body, fontWeight: 600, color: V.dark, display: 'inline-flex', alignItems: 'center' }}>{label}<InfoIcon k={label} /></span>
           <span style={{ fontSize: 11, fontFamily: FONT.body, color: V.gray }}>
             {fmtVal(locValue, format)} vs {fmtVal(peerValue, format)} peer
           </span>
@@ -2324,8 +2429,9 @@ function LocationReport({ location, locations, metrics, dailyMetrics, opsData, b
                     background: V.navy, borderRadius: 8, padding: '10px 14px',
                     minWidth: 90, textAlign: 'center', display: 'flex', flexDirection: 'column', gap: 3,
                   }}>
-                    <div style={{ fontSize: 9, fontFamily: FONT.body, fontWeight: 700, letterSpacing: 1.2, textTransform: 'uppercase', color: 'rgba(185,151,91,0.85)' }}>
+                    <div style={{ fontSize: 9, fontFamily: FONT.body, fontWeight: 700, letterSpacing: 1.2, textTransform: 'uppercase', color: 'rgba(185,151,91,0.85)', display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}>
                       {box.label}
+                      <InfoIcon k={box.label} color="rgba(255,255,255,0.65)" ml={4} />
                     </div>
                     <div style={{ fontFamily: FONT.heading, fontSize: 17, color: V.white, lineHeight: 1.2 }}>
                       {box.value}
@@ -2403,7 +2509,7 @@ function LocationReport({ location, locations, metrics, dailyMetrics, opsData, b
                         borderBottom: `1px solid ${V.light}`,
                         background: i % 2 === 0 ? V.white : V.cream,
                       }}>
-                        <td style={{ padding: '10px', fontWeight: 600, color: V.navy, fontSize: 12 }}>{kpi.name}</td>
+                        <td style={{ padding: '10px', fontWeight: 600, color: V.navy, fontSize: 12 }}><span style={{ display: 'inline-flex', alignItems: 'center' }}>{kpi.name}<InfoIcon k={kpi.name} /></span></td>
                         <td style={{ padding: '10px', fontFamily: FONT.heading, fontSize: 16, color: V.navy }}>
                           {fmtVal(kpi.value, kpi.format)}
                         </td>
@@ -2635,7 +2741,7 @@ function LocationReport({ location, locations, metrics, dailyMetrics, opsData, b
                                   background: abovePeer == null ? V.gray : abovePeer ? V.green : V.red,
                                   display: 'inline-block',
                                 }} />
-                                <span style={{ fontSize: 11, fontFamily: FONT.body, color: V.dark }}>{m.label}</span>
+                                <span style={{ fontSize: 11, fontFamily: FONT.body, color: V.dark, display: 'inline-flex', alignItems: 'center' }}>{m.label}<InfoIcon k={m.label} /></span>
                               </div>
                               <span style={{ fontSize: 12, fontFamily: FONT.body, fontWeight: 700, color: V.navy }}>
                                 {fmtVal(m.value, m.format)}
@@ -5102,6 +5208,7 @@ export default function PerformanceTracker({ initialLocTypes, initialPractices, 
 
   return (
     <div style={{ minHeight: '100vh', background: V.cream, fontFamily: FONT.body, color: V.dark }}>
+      <TooltipHost />
 
       {/* ── Sticky Nav Bar ─────────────────────────────────── */}
       <div style={{
