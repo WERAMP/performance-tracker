@@ -956,7 +956,7 @@ function commFill(hex) {
   const a = hex.toLowerCase() === '#b9975b' ? 0.12 : 0.08; // gold 0.12, navy/green 0.08 (matches commercial-kd)
   return `rgba(${r},${g},${b},${a})`;
 }
-function CommChart({ data, series, rightAxisSeries = [], fillSeries = [], formatter = fmtK, rightAxisFormatter, colorMap = {}, height = 300, note }) {
+function CommChart({ data, series, rightAxisSeries = [], fillSeries = [], formatter = fmtK, rightAxisFormatter, colorMap = {}, height = 300, note, legend = true, labels = true }) {
   const rightSet = new Set(rightAxisSeries);
   const fillSet = new Set(fillSeries);
   const hasRight = rightAxisSeries.length > 0;
@@ -985,13 +985,13 @@ function CommChart({ data, series, rightAxisSeries = [], fillSeries = [], format
           <YAxis yAxisId="left" tick={{ fontSize: 11, fontFamily: FONT.body, fill: V.gray }} tickFormatter={formatter} />
           {hasRight && <YAxis yAxisId="right" orientation="right" tick={{ fontSize: 10, fontFamily: FONT.body, fill: V.gray }} tickFormatter={rightFmt} stroke={V.gold} />}
           <Tooltip content={tip} />
-          <Legend verticalAlign="top" align="center" height={28} iconType="plainline" wrapperStyle={{ fontFamily: FONT.body, fontSize: 11, paddingBottom: 8 }} />
+          {legend && <Legend verticalAlign="top" align="center" height={28} iconType="plainline" wrapperStyle={{ fontFamily: FONT.body, fontSize: 11, paddingBottom: 8 }} />}
           {series.map((s) => {
             const c = col(s);
             const isRight = rightSet.has(s);
             const fmtFor = isRight ? rightFmt : formatter;
             const common = { key: s, name: s, type: 'monotone', dataKey: s, yAxisId: isRight ? 'right' : 'left', stroke: c, strokeWidth: 2, dot: { r: 3, fill: c, strokeWidth: 0 }, activeDot: { r: 5 }, connectNulls: true };
-            const label = <LabelList dataKey={s} position={isRight ? 'bottom' : 'top'} offset={8} formatter={fmtFor} style={{ fontSize: 10, fontFamily: FONT.body, fontWeight: 600, fill: c }} />;
+            const label = labels ? <LabelList dataKey={s} position={isRight ? 'bottom' : 'top'} offset={8} formatter={fmtFor} style={{ fontSize: 10, fontFamily: FONT.body, fontWeight: 600, fill: c }} /> : null;
             return fillSet.has(s)
               ? <Area {...common} fill={commFill(c)}>{label}</Area>
               : <Line {...common} fill="none">{label}</Line>;
@@ -1011,6 +1011,9 @@ function CommercialTrends({ location, grain, providers, monthly, weekly, daily, 
   const [brands, setBrands] = useState(() => new Set(NEURO_BRANDS));
   const [monthsN, setMonthsN] = useState(12);
   const [weeksN, setWeeksN] = useState(13);
+  const [pivotMode, setPivotMode] = useState('provider'); // 'provider' | 'kpi'
+  const [selProv, setSelProv] = useState(null); // explorer By-Provider: the selected provider
+  const [selKpi, setSelKpi] = useState('Total Injectables Sales'); // explorer By-KPI: the selected KPI
   const inSel = (pr) => providers === null || providers.has(pr);
   const grainWord = grain === 'weekly' ? 'Weekly' : 'Monthly';
   const periodWord = grain === 'weekly' ? 'Week' : 'Month';
@@ -1076,8 +1079,118 @@ function CommercialTrends({ location, grain, providers, monthly, weekly, daily, 
   const perVisitColor = { 'Neuro Units / Inj. Visit': V.navy, 'Filler Syringes / Inj. Visit': V.gold };
   const multiColor = { '3 Syringes': V.navy, '4 Syringes': V.gold, '5+ Syringes': V.green };
 
+  // ── Per-(provider, period) series for the date-axis explorer ──
+  const newAgg = () => ({ neuro: { botox: 0, xeomin: 0, dysport: 0, daxxify: 0 }, fillerSyr: 0, injVisits: 0, fillerSales: 0, totalInj: 0, neuroRev: 0, a345: 0, trendSales: 0, trendVisits: 0, rhSales: 0, rhHours: 0 });
+  const periodSet = new Set(periods);
+  const ppAgg = {}; // provider -> { period -> agg }
+  for (const r of rows) {
+    if (!periodSet.has(r.p)) continue;
+    const byp = ppAgg[r.pr] || (ppAgg[r.pr] = {});
+    const a = byp[r.p] || (byp[r.p] = newAgg());
+    a.fillerSyr += r.filler_syr || 0; a.injVisits += r.inj_visits || 0; a.fillerSales += r.filler_sales || 0;
+    a.totalInj += r.total_inj || 0; a.neuroRev += r.neuro_rev || 0;
+    a.a345 += (r.a3 || 0) + (r.a4 || 0) + (r.a5 || 0);
+    a.trendSales += r.trend_sales || 0; a.trendVisits += r.trend_visits || 0;
+    for (const [bucket, units] of Object.entries(r.brands || {})) { const eq = brandEquiv(bucket, units, location); if (eq) a.neuro[eq.brand] += eq.units; }
+  }
+  for (const r of rhRows) { if (!periodSet.has(r.p)) continue; const byp = ppAgg[r.pr]; if (!byp) continue; const a = byp[r.p]; if (!a) continue; a.rhSales += r.total_sales || 0; a.rhHours += r.utilized_hours || 0; }
+  const provNeuro = (a) => NEURO_BRANDS.reduce((s, b) => s + (brands.has(b) ? a.neuro[b] : 0), 0);
+  const KPIS = [
+    { key: 'Neuro Units (Botox-Equiv)', fmt: fmtNum, val: a => provNeuro(a) },
+    { key: 'Filler Syringes', fmt: fmtNum, val: a => a.fillerSyr },
+    { key: 'Neuro Units / Visit', fmt: fmtNum1, val: a => a.injVisits > 0 ? provNeuro(a) / a.injVisits : null },
+    { key: 'Filler Syr / Visit', fmt: fmtNum2, val: a => a.injVisits > 0 ? a.fillerSyr / a.injVisits : null },
+    { key: 'Filler % of Inj', fmt: fmtPct1, val: a => a.totalInj > 0 ? a.fillerSales / a.totalInj * 100 : null },
+    { key: 'Filler Revenue', fmt: fmtMoney, val: a => a.fillerSales },
+    { key: 'Neurotoxin Revenue', fmt: fmtMoney, val: a => a.neuroRev },
+    { key: 'Total Injectables Sales', fmt: fmtMoney, val: a => a.fillerSales + a.neuroRev },
+    { key: 'Multi-Syringe Appts (3+)', fmt: fmtNum, val: a => a.a345 },
+    { key: 'Rev / Utilized Hour', fmt: fmtMoney, val: a => a.rhHours > 0 ? a.rhSales / a.rhHours : null },
+    { key: 'Avg Rev / Visit', fmt: fmtMoney, val: a => a.trendVisits > 0 ? a.trendSales / a.trendVisits : null },
+  ];
+  const provTotal = (pr) => Object.values(ppAgg[pr] || {}).reduce((s, a) => s + a.fillerSales + a.neuroRev, 0);
+  const allProvs = Object.keys(ppAgg).sort((x, y) => provTotal(y) - provTotal(x));
+  const curProv = (selProv && allProvs.includes(selProv)) ? selProv : (allProvs[0] || null);
+  const curKpi = KPIS.find(k => k.key === selKpi) || KPIS[0];
+  const cellFor = (pr, kpi, p) => { const a = ppAgg[pr] && ppAgg[pr][p]; const v = a ? kpi.val(a) : null; return v == null ? '—' : kpi.fmt(v); };
+  const selectStyle = { fontSize: 11, fontFamily: FONT.body, color: V.navy, border: `1px solid ${V.taupe}`, borderRadius: 5, padding: '4px 8px', background: V.white, cursor: 'pointer' };
+  const tTh = { textAlign: 'right', padding: '5px 9px', fontSize: 10, fontFamily: FONT.body, color: V.gold, whiteSpace: 'nowrap', borderBottom: `2px solid ${V.navy}` };
+  const tTh0 = { ...tTh, textAlign: 'left', position: 'sticky', left: 0, background: V.white, zIndex: 1 };
+  const tTd = { textAlign: 'right', padding: '5px 9px', fontSize: 12, fontFamily: FONT.body, color: V.navy, whiteSpace: 'nowrap', borderBottom: `1px solid ${V.taupe}` };
+  const tTd0 = { ...tTd, textAlign: 'left', fontWeight: 600 };
+
   return (
     <div>
+      {/* ── Provider productivity explorer (date axis) ── */}
+      <div style={{ background: V.white, border: `1px solid ${V.taupe}`, borderRadius: 8, padding: '14px 16px', marginBottom: 14 }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, marginBottom: 10, flexWrap: 'wrap' }}>
+          <div style={{ fontFamily: FONT.body, fontSize: 12, fontWeight: 700, color: V.navy }}>Provider Productivity Explorer</div>
+          <div style={{ display: 'flex', gap: 4 }}>
+            {[['provider', 'By Provider'], ['kpi', 'By KPI']].map(([key, lbl]) => (
+              <button key={key} onClick={() => setPivotMode(key)} style={{
+                fontSize: 11, fontFamily: FONT.body, padding: '4px 10px', borderRadius: 5, cursor: 'pointer',
+                border: `1px solid ${pivotMode === key ? V.navy : V.taupe}`, background: pivotMode === key ? V.navy : V.white, color: pivotMode === key ? V.cream : V.navy,
+              }}>{lbl}</button>
+            ))}
+          </div>
+        </div>
+
+        {allProvs.length === 0 ? (
+          <div style={{ fontSize: 12, color: V.gray, fontFamily: FONT.body }}>No provider data for this selection.</div>
+        ) : pivotMode === 'kpi' ? (
+          <>
+            {/* select ONE KPI → rows = providers, columns = dates */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
+              <span style={{ fontSize: 11, fontFamily: FONT.body, color: V.gray }}>KPI</span>
+              <select value={curKpi.key} onChange={(e) => setSelKpi(e.target.value)} style={selectStyle}>
+                {KPIS.map(k => <option key={k.key} value={k.key}>{k.key}</option>)}
+              </select>
+            </div>
+            <div style={{ overflowX: 'auto' }}>
+              <table style={{ borderCollapse: 'collapse', width: '100%' }}>
+                <thead><tr>
+                  <th style={tTh0}>Provider</th>
+                  {periods.map(p => <th key={p} style={tTh}>{periodLabel(p)}</th>)}
+                </tr></thead>
+                <tbody>
+                  {allProvs.map((pr, i) => (
+                    <tr key={pr} style={{ background: i % 2 ? V.cream : V.white }}>
+                      <td style={{ ...tTd0, background: i % 2 ? V.cream : V.white }}>{pr}</td>
+                      {periods.map(p => <td key={p} style={tTd}>{cellFor(pr, curKpi, p)}</td>)}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </>
+        ) : (
+          <>
+            {/* select ONE provider → rows = KPIs, columns = dates */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
+              <span style={{ fontSize: 11, fontFamily: FONT.body, color: V.gray }}>Provider</span>
+              <select value={curProv || ''} onChange={(e) => setSelProv(e.target.value)} style={selectStyle}>
+                {allProvs.map(pr => <option key={pr} value={pr}>{pr}</option>)}
+              </select>
+            </div>
+            <div style={{ overflowX: 'auto' }}>
+              <table style={{ borderCollapse: 'collapse', width: '100%' }}>
+                <thead><tr>
+                  <th style={tTh0}>KPI</th>
+                  {periods.map(p => <th key={p} style={tTh}>{periodLabel(p)}</th>)}
+                </tr></thead>
+                <tbody>
+                  {KPIS.map((k, i) => (
+                    <tr key={k.key} style={{ background: i % 2 ? V.cream : V.white }}>
+                      <td style={{ ...tTd0, background: i % 2 ? V.cream : V.white }}>{k.key}</td>
+                      {periods.map(p => <td key={p} style={tTd}>{curProv ? cellFor(curProv, k, p) : '—'}</td>)}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </>
+        )}
+      </div>
       {/* how many periods to display */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
         <span style={{ fontSize: 11, fontFamily: FONT.body, color: V.gray }}>Show</span>
