@@ -103,6 +103,19 @@ into the sales base. A one-off full-history recompute of `rt`/`s`/`rev` across
 `sold_by` Products grouped by `(week, center, sold_by)`, restricted to sellers who also
 appear as `serviced_by` (the provider universe).
 
+## Durability — history is protected on every machine
+
+`refresh-daily.cjs` now **structurally** only writes the current week (`replaceWeek`),
+the trailing ~4 weeks (`replaceWeeks`), or the daily lookback window — and **drops any
+q-file rows outside that window**. So even if the daily refresh is run on someone else's
+machine (e.g. Kieren's) with a full-history or non-canonical pull, it **cannot overwrite
+the committed canonical injectables (`inj`/`r`) or sold_by retail (`rt`/`s`) history** —
+those values stay as committed. The console logs "N non-current-week rows ignored — history
+protected" when it drops rows. The **only** thing still riding on the operator's SQL is the
+**current week's** definition; run the canonical q1/q8/q10/q11 SQL above so that week is
+canonical too. (`INSTRUCTIONS.md` is a local, untracked file on the operator's machine — it
+is not in this repo, so this committed guard is what guarantees durability.)
+
 ## Notes
 
 - **`refresh-daily.cjs` only replaces the current week** (q1/q8/q10) / trailing 4 weeks

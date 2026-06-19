@@ -66,7 +66,15 @@ function ff(v) { const n = parseFloat(v); return isNaN(n) ? null : Math.round(n 
 
 function replaceWeek(file, newRows) {
   const existing = readJson(file);
-  const merged = [...existing.filter(r => r.w !== W), ...newRows];
+  // DURABILITY: only ever write the current week (W). Drop any newRows for other
+  // weeks so a full-history or non-canonical q-file pull can NEVER overwrite the
+  // committed historical values (canonical injectables `inj`, sold_by retail
+  // `rt`/`s`). Whatever machine runs the refresh, history is preserved as-is.
+  // The current week's correctness still depends on the operator's SQL — the
+  // canonical q1/q8/q10/q11 SQL is in scripts/SYNC-INJECTABLES.md.
+  const wRows = newRows.filter(r => r.w === W);
+  const droppedHist = newRows.length - wRows.length;
+  const merged = [...existing.filter(r => r.w !== W), ...wRows];
   merged.sort((a, b) =>
     (a.w || '').localeCompare(b.w || '') ||
     (a.c || '').localeCompare(b.c || '') ||
@@ -74,7 +82,7 @@ function replaceWeek(file, newRows) {
   );
   writeJson(file, merged);
   const weeks = [...new Set(merged.map(r => r.w))].sort();
-  console.log(`${file}: ${existing.filter(r => r.w === W).length} removed, ${newRows.length} added -> total=${merged.length}, latest=${weeks[weeks.length - 1]}`);
+  console.log(`${file}: ${existing.filter(r => r.w === W).length} removed, ${wRows.length} added${droppedHist ? ` (${droppedHist} non-current-week rows ignored — history protected)` : ''} -> total=${merged.length}, latest=${weeks[weeks.length - 1]}`);
 }
 
 // Replace EVERY week present in newRows. Use this when the input q-file
@@ -90,14 +98,19 @@ function replaceWeek(file, newRows) {
 // replaceWeek. Re-running it daily then self-heals any partial-week capture
 // within ~4 days of the lag clearing.
 function replaceWeeks(file, newRows) {
-  const newWeekSet = new Set(newRows.map(r => r.w).filter(Boolean));
+  // DURABILITY: clamp to a trailing window (current week W back ~4 weeks) so a
+  // full-history pull can't replace older committed weeks. History stays put
+  // regardless of what the q-file contains. See scripts/SYNC-INJECTABLES.md.
+  const CUTOFF = (() => { const d = new Date(W + 'T00:00:00Z'); d.setUTCDate(d.getUTCDate() - 28); return d.toISOString().slice(0, 10); })();
+  const recent = newRows.filter(r => r.w && r.w >= CUTOFF);
+  const newWeekSet = new Set(recent.map(r => r.w).filter(Boolean));
   if (newWeekSet.size === 0) {
     console.warn(`${file}: replaceWeeks called with no week info — falling back to replaceWeek with W=${W}`);
     return replaceWeek(file, newRows);
   }
   const existing = readJson(file);
   const removed = existing.filter(r => newWeekSet.has(r.w)).length;
-  const merged = [...existing.filter(r => !newWeekSet.has(r.w)), ...newRows];
+  const merged = [...existing.filter(r => !newWeekSet.has(r.w)), ...recent];
   merged.sort((a, b) =>
     (a.w || '').localeCompare(b.w || '') ||
     (a.c || '').localeCompare(b.c || '') ||
@@ -321,10 +334,13 @@ const dailyRows = q8Data.filter(r => knownCenters.has(r.c)).map(r => ({
   s: fc(r.s), co: (dailyCollMap[r.d] && dailyCollMap[r.d][r.c]) || 0,
   p: fc(r.p), rt: fc(r.rt), inj: fc(r.inj)
 }));
-const lookbackDates = [...new Set(dailyRows.map(r => r.d))];
+// DURABILITY: only touch days within the lookback window so a full-history q8
+// pull can't overwrite committed historical daily `inj` (canonical backfill).
+const safeDailyRows = dailyRows.filter(r => r.d >= LOOKBACK_START);
+const lookbackDates = [...new Set(safeDailyRows.map(r => r.d))];
 const existingDaily = readJson('daily-metrics.json');
 const withoutLookback = existingDaily.filter(r => !lookbackDates.includes(r.d));
-const mergedDaily = [...withoutLookback, ...dailyRows];
+const mergedDaily = [...withoutLookback, ...safeDailyRows];
 mergedDaily.sort((a, b) => (a.d || '').localeCompare(b.d || '') || (a.c || '').localeCompare(b.c || ''));
 writeJson('daily-metrics.json', mergedDaily);
 console.log(`daily-metrics.json: ${existingDaily.filter(r => lookbackDates.includes(r.d)).length} removed (${LOOKBACK_START} lookback), ${dailyRows.length} added -> total=${mergedDaily.length}, latest=${lookbackDates.sort().pop()}`);
