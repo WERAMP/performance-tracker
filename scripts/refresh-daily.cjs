@@ -13,6 +13,10 @@
 //   q9.json  — Q9 daily collections (7-day lookback, use_dataset(1237) NOT flat_file)
 //   q10.json — Q10 metrics by provider
 //   q11.json — Q11 injectable revenue by provider
+//
+//   NOTE: q1/q8/q10 `inj` and q11 `r` MUST use the canonical injectables
+//   definition — see scripts/SYNC-INJECTABLES.md (keeps numbers tied to v_KD).
+//
 //   q12.json — Q12 collections by provider (use_dataset(1237) NOT flat_file)
 //   q13.json — Q13 syringe by provider
 //   q14.json — Q14 ops by provider

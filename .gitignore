@@ -5,3 +5,6 @@ scripts/.corral-cache
 
 # transient daily query inputs (q1.json..q17.json, q-*.json)
 scripts/q*.json
+
+# Section E commercial cache (transient Corral results)
+scripts/.commercial-cache/

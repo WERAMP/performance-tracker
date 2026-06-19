@@ -1,8 +1,9 @@
 import React, { useState, useMemo, useEffect, useRef } from 'react';
 import {
   LineChart, Line, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip,
-  Legend, ResponsiveContainer, ComposedChart, Area
+  Legend, ResponsiveContainer, ComposedChart, Area, LabelList
 } from 'recharts';
+import { brandEquiv, NEURO_BRANDS } from '../commercialDefs';
 
 /* ═══════════════════════════════════════════════════════════════
    AMP Performance Tracker — Dynamic Data from JSON
@@ -946,8 +947,240 @@ function buildOpsChart(opsData, filteredNames, opsNameMap, valueKey) {
 //  Location Performance Report (collapsible, shown for single location)
 // ══════════════════════════════════════════════════════════════
 
-function LocationReport({ location, locations, metrics, dailyMetrics, opsData, btxData, syringeLocData, utilizationData, providerHoursData, injRevProviderData, btxProviderData, syringeProvData, revCollProvData, budgetData, monthlyBudgetData, metricsProviderData, opsProviderData, utilHoursProviderData, dailyInjRevProviderData, dailyRevCollProvData, dailyMetricsProviderData, dailyBtxProviderData, dailySyringeProvData }) {
-  const [expandedSections, setExpandedSections] = useState({ kpi: false, efficiency: false, providers: false, recommendations: false });
+// Chart renderer styled to match the commercial-kd board: smooth (monotone) lines,
+// filled areas for single-series trend charts, navy/gold/green palette + soft fills.
+function commFill(hex) {
+  const h = (hex || '').replace('#', '');
+  if (h.length !== 6) return 'rgba(4,30,66,0.08)';
+  const r = parseInt(h.slice(0, 2), 16), g = parseInt(h.slice(2, 4), 16), b = parseInt(h.slice(4, 6), 16);
+  const a = hex.toLowerCase() === '#b9975b' ? 0.12 : 0.08; // gold 0.12, navy/green 0.08 (matches commercial-kd)
+  return `rgba(${r},${g},${b},${a})`;
+}
+function CommChart({ data, series, rightAxisSeries = [], fillSeries = [], formatter = fmtK, rightAxisFormatter, colorMap = {}, height = 300, note }) {
+  const rightSet = new Set(rightAxisSeries);
+  const fillSet = new Set(fillSeries);
+  const hasRight = rightAxisSeries.length > 0;
+  const rightFmt = rightAxisFormatter || formatter;
+  const col = (s) => colorMap[s] || V.navy;
+  const tip = ({ active, payload, label }) => {
+    if (!active || !payload) return null;
+    return (
+      <div style={{ background: V.navy, borderRadius: 6, padding: '8px 12px', fontFamily: FONT.body, fontSize: 12 }}>
+        <div style={{ color: V.gold, fontWeight: 600, marginBottom: 4 }}>{label}</div>
+        {payload.map((e, i) => (
+          <div key={i} style={{ display: 'flex', justifyContent: 'space-between', gap: 16, padding: '1px 0' }}>
+            <span style={{ color: V.cream }}>{e.name}</span>
+            <span style={{ color: V.cream, fontWeight: 600 }}>{(rightSet.has(e.name) ? rightFmt : formatter)(e.value)}</span>
+          </div>
+        ))}
+      </div>
+    );
+  };
+  return (
+    <div>
+      <ResponsiveContainer width="100%" height={height}>
+        <ComposedChart data={data} margin={{ top: 8, right: hasRight ? 48 : 12, left: 0, bottom: 0 }}>
+          <CartesianGrid strokeDasharray="3 3" stroke={V.taupe} />
+          <XAxis dataKey="week" tick={{ fontSize: 11, fontFamily: FONT.body, fill: V.gray }} />
+          <YAxis yAxisId="left" tick={{ fontSize: 11, fontFamily: FONT.body, fill: V.gray }} tickFormatter={formatter} />
+          {hasRight && <YAxis yAxisId="right" orientation="right" tick={{ fontSize: 10, fontFamily: FONT.body, fill: V.gray }} tickFormatter={rightFmt} stroke={V.gold} />}
+          <Tooltip content={tip} />
+          <Legend verticalAlign="top" align="center" height={28} iconType="plainline" wrapperStyle={{ fontFamily: FONT.body, fontSize: 11, paddingBottom: 8 }} />
+          {series.map((s) => {
+            const c = col(s);
+            const isRight = rightSet.has(s);
+            const fmtFor = isRight ? rightFmt : formatter;
+            const common = { key: s, name: s, type: 'monotone', dataKey: s, yAxisId: isRight ? 'right' : 'left', stroke: c, strokeWidth: 2, dot: { r: 3, fill: c, strokeWidth: 0 }, activeDot: { r: 5 }, connectNulls: true };
+            const label = <LabelList dataKey={s} position={isRight ? 'bottom' : 'top'} offset={8} formatter={fmtFor} style={{ fontSize: 10, fontFamily: FONT.body, fontWeight: 600, fill: c }} />;
+            return fillSet.has(s)
+              ? <Area {...common} fill={commFill(c)}>{label}</Area>
+              : <Line {...common} fill="none">{label}</Line>;
+          })}
+        </ComposedChart>
+      </ResponsiveContainer>
+      {note && <div style={{ fontSize: 10, color: V.gray, fontFamily: FONT.body, marginTop: 4, textAlign: 'right' }}>{note}</div>}
+    </div>
+  );
+}
+
+// ── Section E: Consultation Commercial Success Tracking ──────────────────────
+// Mirrors the commercial-kd Monthly/Weekly/Daily Trends tabs, scoped to one
+// location and filtered to the selected providers. Re-derived feeds carry raw
+// brand buckets; Botox-equiv conversion is applied client-side (commercialDefs).
+function CommercialTrends({ location, grain, providers, monthly, weekly, daily, revhourMonthly, revhourWeekly }) {
+  const [brands, setBrands] = useState(() => new Set(NEURO_BRANDS));
+  const [monthsN, setMonthsN] = useState(12);
+  const [weeksN, setWeeksN] = useState(13);
+  const inSel = (pr) => providers === null || providers.has(pr);
+  const grainWord = grain === 'weekly' ? 'Weekly' : 'Monthly';
+  const periodWord = grain === 'weekly' ? 'Week' : 'Month';
+  const curMonthKey = new Date().toISOString().slice(0, 7);
+
+  const fmtMoney = (v) => v == null ? '' : `$${Math.round(v).toLocaleString()}`;
+  const fmtNum = (v) => v == null ? '' : Math.round(v).toLocaleString();
+  const fmtNum1 = (v) => v == null ? '' : `${Math.round(v * 10) / 10}`;
+  const fmtNum2 = (v) => v == null ? '' : `${Math.round(v * 100) / 100}`;
+  const fmtPct1 = (v) => v == null ? '' : `${Math.round(v * 10) / 10}%`;
+  const periodLabel = (p) => grain === 'weekly'
+    ? 'Wk of ' + new Date(p + 'T00:00:00').toLocaleString('en', { month: 'short', day: 'numeric' })
+    : formatMonth(p.slice(0, 7), p.slice(0, 7) === curMonthKey);
+
+  const rows = (grain === 'weekly' ? (weekly || []) : (monthly || [])).filter(r => r.c === location && inSel(r.pr));
+  const allPeriods = [...new Set(rows.map(r => r.p))].sort();
+  const N = grain === 'weekly' ? weeksN : monthsN;
+  const periods = (N === 'all') ? allPeriods : allPeriods.slice(-N);
+  const agg = {};
+  allPeriods.forEach(p => { agg[p] = { neuro: { botox: 0, xeomin: 0, dysport: 0, daxxify: 0 }, fillerSyr: 0, injVisits: 0, fillerSales: 0, totalInj: 0, neuroRev: 0, a3: 0, a4: 0, a5: 0, trendSales: 0, trendVisits: 0 }; });
+  for (const r of rows) {
+    const a = agg[r.p]; if (!a) continue;
+    a.fillerSyr += r.filler_syr || 0; a.injVisits += r.inj_visits || 0;
+    a.fillerSales += r.filler_sales || 0; a.totalInj += r.total_inj || 0;
+    a.neuroRev += r.neuro_rev || 0; a.a3 += r.a3 || 0; a.a4 += r.a4 || 0; a.a5 += r.a5 || 0;
+    a.trendSales += r.trend_sales || 0; a.trendVisits += r.trend_visits || 0;
+    for (const [bucket, units] of Object.entries(r.brands || {})) {
+      const eq = brandEquiv(bucket, units, location);
+      if (eq) a.neuro[eq.brand] += eq.units;
+    }
+  }
+  const neuroTotal = (p) => NEURO_BRANDS.reduce((s, b) => s + (brands.has(b) ? agg[p].neuro[b] : 0), 0);
+
+  // rev/utilized hour is practice-grain (no center) — resolve this location's practice
+  const practice = (rows.find(r => r.practice) || {}).practice || '';
+  const rhRows = (grain === 'weekly' ? (revhourWeekly || []) : (revhourMonthly || [])).filter(r => r.practice === practice && inSel(r.pr));
+  const rhAgg = {};
+  for (const r of rhRows) { (rhAgg[r.p] = rhAgg[r.p] || { sales: 0, hours: 0 }); rhAgg[r.p].sales += r.total_sales || 0; rhAgg[r.p].hours += r.utilized_hours || 0; }
+  const rhPeriods = [...new Set(rhRows.map(r => r.p))].sort().filter(p => !periods.length || p >= periods[0]);
+
+  const mk = (fn) => periods.map(p => ({ week: periodLabel(p), ...fn(p) }));
+  const ChartCard = ({ title, children }) => (
+    <div style={{ background: V.white, border: `1px solid ${V.taupe}`, borderRadius: 8, padding: '14px 16px', marginBottom: 14 }}>
+      <div style={{ fontFamily: FONT.body, fontSize: 12, fontWeight: 700, color: V.navy, marginBottom: 8 }}>{title}</div>
+      {children}
+    </div>
+  );
+
+  if (!periods.length && grain !== 'daily') {
+    return <div style={{ padding: 16, color: V.gray, fontFamily: FONT.body, fontSize: 12 }}>No commercial data for this location / provider selection.</div>;
+  }
+
+  // ── Daily tab: units table only (last 30 days) ──
+  if (grain === 'daily') {
+    const drows = (daily || []).filter(r => r.c === location && inSel(r.pr))
+      .sort((a, b) => (b.d || '').localeCompare(a.d || '') || (a.pr || '').localeCompare(b.pr || ''));
+    return <UnitsTable title="Daily Botox Units & Filler Syringes by Provider (Last 30 Days)" rows={drows} periodKey="d" periodHead="Date"
+      fmtPeriod={(d) => new Date(d + 'T00:00:00').toLocaleDateString('en', { month: 'short', day: 'numeric', year: 'numeric' })}
+      botoxKey="botox_units" fillerKey="filler_syringes" />;
+  }
+
+  const dualColor = { 'Neurotoxin Units (Botox-Equiv)': V.navy, 'Filler Syringes': V.gold };
+  const perVisitColor = { 'Neuro Units / Inj. Visit': V.navy, 'Filler Syringes / Inj. Visit': V.gold };
+  const multiColor = { '3 Syringes': V.navy, '4 Syringes': V.gold, '5+ Syringes': V.green };
+
+  return (
+    <div>
+      {/* how many periods to display */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
+        <span style={{ fontSize: 11, fontFamily: FONT.body, color: V.gray }}>Show</span>
+        <select value={String(N)} onChange={(e) => { const v = e.target.value === 'all' ? 'all' : parseInt(e.target.value, 10); grain === 'weekly' ? setWeeksN(v) : setMonthsN(v); }}
+          style={{ fontSize: 11, fontFamily: FONT.body, color: V.navy, border: `1px solid ${V.taupe}`, borderRadius: 5, padding: '4px 8px', background: V.white, cursor: 'pointer' }}>
+          {(grain === 'weekly' ? [8, 13, 26, 52] : [3, 6, 12, 18]).map(n => (
+            <option key={n} value={n}>Last {n} {grain === 'weekly' ? 'weeks' : 'months'}</option>
+          ))}
+          <option value="all">All {grain === 'weekly' ? 'weeks' : 'months'}</option>
+        </select>
+        <span style={{ fontSize: 10, fontFamily: FONT.body, color: V.gray }}>{periods.length} of {allPeriods.length} {grain === 'weekly' ? 'weeks' : 'months'}</span>
+      </div>
+      {/* brand toggle for the Botox-equiv chart */}
+      <div style={{ display: 'flex', gap: 6, marginBottom: 12, flexWrap: 'wrap' }}>
+        {[['all', 'All'], ...NEURO_BRANDS.map(b => [b, b[0].toUpperCase() + b.slice(1)])].map(([key, lbl]) => {
+          const allOn = NEURO_BRANDS.every(b => brands.has(b));
+          const active = key === 'all' ? allOn : brands.has(key);
+          return (
+            <button key={key} onClick={() => setBrands(prev => {
+              if (key === 'all') return new Set(NEURO_BRANDS);
+              const n = new Set(prev); n.has(key) ? n.delete(key) : n.add(key); return n;
+            })} style={{
+              fontSize: 11, fontFamily: FONT.body, padding: '4px 10px', borderRadius: 5, cursor: 'pointer',
+              border: `1px solid ${active ? V.navy : V.taupe}`, background: active ? V.navy : V.white, color: active ? V.cream : V.navy,
+            }}>{lbl}</button>
+          );
+        })}
+      </div>
+
+      <ChartCard title={`Total Neurotoxin Units (Botox-Equivalent) & Filler Syringes — ${grainWord}`}>
+        <CommChart data={mk(p => ({ 'Neurotoxin Units (Botox-Equiv)': Math.round(neuroTotal(p)), 'Filler Syringes': Math.round(agg[p].fillerSyr) }))}
+          series={['Neurotoxin Units (Botox-Equiv)', 'Filler Syringes']} rightAxisSeries={['Filler Syringes']}
+          formatter={fmtNum} rightAxisFormatter={fmtNum} colorMap={dualColor} />
+      </ChartCard>
+
+      <ChartCard title={`Neurotoxin Units (Botox-Equiv) per Injectables Visit & Filler Syringes per Injectables Visit — ${grainWord}`}>
+        <CommChart data={mk(p => ({ 'Neuro Units / Inj. Visit': agg[p].injVisits > 0 ? Math.round(neuroTotal(p) / agg[p].injVisits * 10) / 10 : 0, 'Filler Syringes / Inj. Visit': agg[p].injVisits > 0 ? Math.round(agg[p].fillerSyr / agg[p].injVisits * 100) / 100 : 0 }))}
+          series={['Neuro Units / Inj. Visit', 'Filler Syringes / Inj. Visit']} rightAxisSeries={['Filler Syringes / Inj. Visit']}
+          formatter={fmtNum1} rightAxisFormatter={fmtNum2} colorMap={perVisitColor} />
+      </ChartCard>
+
+      <ChartCard title={`Filler Sales as % of All Injectables Sales — ${grainWord}`}>
+        <CommChart data={mk(p => ({ 'Filler % of Injectables': agg[p].totalInj > 0 ? Math.round(agg[p].fillerSales / agg[p].totalInj * 1000) / 10 : 0 }))}
+          series={['Filler % of Injectables']} fillSeries={['Filler % of Injectables']} formatter={fmtPct1} colorMap={{ 'Filler % of Injectables': V.gold }} />
+      </ChartCard>
+
+      <ChartCard title={`Total Filler Revenue by ${periodWord}`}>
+        <CommChart data={mk(p => ({ 'Filler Revenue': Math.round(agg[p].fillerSales) }))} series={['Filler Revenue']} fillSeries={['Filler Revenue']} formatter={fmtMoney} colorMap={{ 'Filler Revenue': V.gold }} />
+      </ChartCard>
+
+      <ChartCard title={`Total Neurotoxin Revenue by ${periodWord}`}>
+        <CommChart data={mk(p => ({ 'Neurotoxin Revenue': Math.round(agg[p].neuroRev) }))} series={['Neurotoxin Revenue']} fillSeries={['Neurotoxin Revenue']} formatter={fmtMoney} colorMap={{ 'Neurotoxin Revenue': V.navy }} />
+      </ChartCard>
+
+      <ChartCard title={`Total Injectables Sales by ${periodWord}`}>
+        <CommChart data={mk(p => ({ 'Total Injectables Sales': Math.round(agg[p].fillerSales + agg[p].neuroRev) }))} series={['Total Injectables Sales']} fillSeries={['Total Injectables Sales']} formatter={fmtMoney} colorMap={{ 'Total Injectables Sales': V.green }} />
+      </ChartCard>
+
+      <ChartCard title={`Multisyringe Filler Appointments by ${periodWord}`}>
+        <CommChart data={mk(p => ({ '3 Syringes': agg[p].a3, '4 Syringes': agg[p].a4, '5+ Syringes': agg[p].a5 }))} series={['3 Syringes', '4 Syringes', '5+ Syringes']} formatter={fmtNum} colorMap={multiColor} />
+      </ChartCard>
+
+      <ChartCard title={`Revenue per Utilized Hour — ${grainWord}`}>
+        <CommChart data={rhPeriods.map(p => ({ week: periodLabel(p), 'Rev / Utilized Hour': rhAgg[p].hours > 0 ? Math.round(rhAgg[p].sales / rhAgg[p].hours) : 0 }))} series={['Rev / Utilized Hour']} fillSeries={['Rev / Utilized Hour']} formatter={fmtMoney} colorMap={{ 'Rev / Utilized Hour': V.navy }} note={practice ? `Practice-level (${practice}); employee schedules are not center-specific` : null} />
+      </ChartCard>
+
+      <ChartCard title={`Avg Rev / Visit — ${grainWord}`}>
+        <CommChart data={mk(p => ({ 'Avg Rev / Visit': agg[p].trendVisits > 0 ? Math.round(agg[p].trendSales / agg[p].trendVisits) : 0 }))} series={['Avg Rev / Visit']} fillSeries={['Avg Rev / Visit']} formatter={fmtMoney} colorMap={{ 'Avg Rev / Visit': V.gold }} note="Excludes consult-only & touch-up-only visits" />
+      </ChartCard>
+    </div>
+  );
+}
+
+function UnitsTable({ title, rows, periodKey, periodHead, fmtPeriod, botoxKey, fillerKey }) {
+  return (
+    <div style={{ background: V.white, border: `1px solid ${V.taupe}`, borderRadius: 8, padding: '14px 16px', marginBottom: 14, overflowX: 'auto' }}>
+      <div style={{ fontFamily: FONT.body, fontSize: 12, fontWeight: 700, color: V.navy, marginBottom: 8 }}>{title}</div>
+      <table style={{ width: '100%', borderCollapse: 'collapse', fontFamily: FONT.body, fontSize: 12 }}>
+        <thead>
+          <tr style={{ borderBottom: `2px solid ${V.navy}` }}>
+            {[periodHead, 'Provider', 'Botox Units', 'Filler Syringes'].map((h, i) => (
+              <th key={h} style={{ padding: '7px 10px', textAlign: i < 2 ? 'left' : 'right', fontSize: 9, fontWeight: 700, color: V.gold, letterSpacing: 1, textTransform: 'uppercase' }}>{h}</th>
+            ))}
+          </tr>
+        </thead>
+        <tbody>
+          {rows.slice(0, 2000).map((r, i) => (
+            <tr key={i} style={{ borderBottom: `1px solid ${V.light}`, background: i % 2 === 0 ? V.white : V.cream }}>
+              <td style={{ padding: '7px 10px', color: V.navy }}>{fmtPeriod(r[periodKey])}</td>
+              <td style={{ padding: '7px 10px', color: V.dark }}>{r.pr}</td>
+              <td style={{ padding: '7px 10px', textAlign: 'right', color: V.dark }}>{Math.round(r[botoxKey] || 0).toLocaleString()}</td>
+              <td style={{ padding: '7px 10px', textAlign: 'right', color: V.dark }}>{Math.round(r[fillerKey] || 0).toLocaleString()}</td>
+            </tr>
+          ))}
+          {rows.length === 0 && <tr><td colSpan={4} style={{ padding: 12, color: V.gray }}>No data for this selection.</td></tr>}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+function LocationReport({ location, locations, metrics, dailyMetrics, opsData, btxData, syringeLocData, utilizationData, providerHoursData, injRevProviderData, btxProviderData, syringeProvData, revCollProvData, budgetData, monthlyBudgetData, metricsProviderData, opsProviderData, utilHoursProviderData, dailyInjRevProviderData, dailyRevCollProvData, dailyMetricsProviderData, dailyBtxProviderData, dailySyringeProvData, commMonthly, commWeekly, commDailyUnits, commRevhourMonthly, commRevhourWeekly }) {
+  const [expandedSections, setExpandedSections] = useState({ kpi: false, efficiency: false, providers: false, recommendations: false, commercial: false });
   const toggleSection = (key) => setExpandedSections(prev => ({ ...prev, [key]: !prev[key] }));
   const [reportPeriod, setReportPeriod] = useState('MTD');
   // Provider filter — null means all selected; a Set means only those names are shown
@@ -960,6 +1193,20 @@ function LocationReport({ location, locations, metrics, dailyMetrics, opsData, b
   const [effProviders, setEffProviders] = useState(null);
   const [effDropdownOpen, setEffDropdownOpen] = useState(false);
   const effDropdownRef = useRef(null);
+  // Section E (Consultation Commercial Success Tracking)
+  const [commGrain, setCommGrain] = useState('monthly'); // 'monthly' | 'weekly' | 'daily'
+  const [commProviders, setCommProviders] = useState(null);
+  const [commDropdownOpen, setCommDropdownOpen] = useState(false);
+  const commDropdownRef = useRef(null);
+  // Provider universe for Section E = injectors present at this location in the
+  // commercial feeds (sold_by basis, injector-only — independent of Sections A–D).
+  const commProviderNames = useMemo(() => {
+    const s = new Set();
+    for (const r of [...(commMonthly || []), ...(commWeekly || []), ...(commDailyUnits || [])]) {
+      if (r.c === location && r.pr) s.add(r.pr);
+    }
+    return [...s].sort();
+  }, [commMonthly, commWeekly, commDailyUnits, location]);
 
   const reportData = useMemo(() => {
     if (!location || !locations.length || !metrics.length) return null;
@@ -1420,6 +1667,9 @@ function LocationReport({ location, locations, metrics, dailyMetrics, opsData, b
           return totalRev > 0 ? (totalColl / totalRev) * 100 : null;
         })()
         : null;
+      const peerAvgTotalRev = peerRevCollProviders.length > 0
+        ? peerRevCollProviders.map(pr => peerRevCollRows.filter(r => r.pr === pr).reduce((s, r) => s + (Number(r.rev) || 0), 0)).reduce((s, v) => s + v, 0) / peerRevCollProviders.length
+        : null;
 
       // Peer averages for new metrics: Avg Rev Per Patient, Utilization, Rev Per Hour
       const peerMpRows = (dailyMetricsProviderData || []).filter(r => peers.includes(r.c) && inDateRange(r));
@@ -1518,9 +1768,9 @@ function LocationReport({ location, locations, metrics, dailyMetrics, opsData, b
         };
 
         return {
-          name: pr, injRev, avgBtx, avgSyrInj, avgSyrFiller, collPct,
+          name: pr, totalRev: prRev, injRev, avgBtx, avgSyrInj, avgSyrFiller, collPct,
           avgRevPerPt, provUtil, provRevPerHour,
-          peerAvgInjRev, peerAvgBtx, peerAvgSyrInj, peerAvgSyrFiller, peerAvgCollPct,
+          peerAvgTotalRev, peerAvgInjRev, peerAvgBtx, peerAvgSyrInj, peerAvgSyrFiller, peerAvgCollPct,
           peerAvgRevPerPt, peerAvgUtil, peerAvgRevPerHour,
           recommendation: weakest ? recMap[weakest] : null,
         };
@@ -2240,6 +2490,7 @@ function LocationReport({ location, locations, metrics, dailyMetrics, opsData, b
                   .filter(prov => selectedProviders === null || selectedProviders.has(prov.name))
                   .map(prov => {
                   const metricRows = [
+                    { label: 'Total Revenue', value: prov.totalRev, peerAvg: prov.peerAvgTotalRev, format: 'dollar', higherBetter: true },
                     { label: 'Inj Revenue', value: prov.injRev, peerAvg: prov.peerAvgInjRev, format: 'dollar', higherBetter: true },
                     { label: 'Avg Botox Units', value: prov.avgBtx, peerAvg: prov.peerAvgBtx, format: 'num1', higherBetter: true },
                     { label: 'Avg Syr/Inj Appt', value: prov.avgSyrInj, peerAvg: prov.peerAvgSyrInj, format: 'num1', higherBetter: true },
@@ -2405,6 +2656,46 @@ function LocationReport({ location, locations, metrics, dailyMetrics, opsData, b
             )}
           </div>
         )}
+
+        {/* ── Section E: Consultation Commercial Success Tracking ── */}
+        <div style={{ marginBottom: 28 }}>
+          <div style={{
+            display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+            padding: '10px 0', borderBottom: `1px solid ${V.taupe}`,
+            marginBottom: expandedSections.commercial ? 14 : 0,
+          }}>
+            <button onClick={() => toggleSection('commercial')}
+              style={{ display: 'flex', alignItems: 'center', gap: 8, flex: 1, background: 'none', border: 'none', cursor: 'pointer', textAlign: 'left', padding: 0 }}>
+              <span style={{ fontSize: 10, fontWeight: 700, color: V.gold, letterSpacing: 1.5, textTransform: 'uppercase', fontFamily: FONT.body }}>E.</span>
+              <span style={{ fontSize: 13, fontFamily: FONT.body, fontWeight: 600, color: V.navy }}>Consultation Commercial Success Tracking</span>
+              {commProviders !== null && commProviders.size < commProviderNames.length && (
+                <span style={{ fontSize: 9, fontFamily: FONT.body, color: V.gold, background: V.navy, padding: '2px 7px', borderRadius: 10, marginLeft: 4 }}>
+                  {commProviders.size} provider{commProviders.size !== 1 ? 's' : ''}
+                </span>
+              )}
+              <span style={{ color: V.gray, fontSize: 12, marginLeft: 4, transition: 'transform 0.2s', display: 'inline-block', transform: expandedSections.commercial ? 'rotate(180deg)' : 'rotate(0deg)' }}>{'▼'}</span>
+            </button>
+            <ProviderDropdown open={commDropdownOpen} setOpen={setCommDropdownOpen}
+              selected={commProviders} setSelected={setCommProviders}
+              allNames={commProviderNames} dropRef={commDropdownRef} />
+          </div>
+          {expandedSections.commercial && (
+            <div>
+              <div style={{ display: 'flex', gap: 4, marginBottom: 14 }}>
+                {[['monthly', 'Monthly Trends'], ['weekly', 'Weekly Trends'], ['daily', 'Daily Trends']].map(([k, lbl]) => (
+                  <button key={k} onClick={() => setCommGrain(k)} style={{
+                    fontSize: 11, fontFamily: FONT.body, fontWeight: 600, padding: '6px 14px', borderRadius: 6, cursor: 'pointer',
+                    border: `1px solid ${commGrain === k ? V.navy : V.taupe}`,
+                    background: commGrain === k ? V.navy : V.white, color: commGrain === k ? V.cream : V.navy,
+                  }}>{lbl}</button>
+                ))}
+              </div>
+              <CommercialTrends location={location} grain={commGrain} providers={commProviders}
+                monthly={commMonthly} weekly={commWeekly} daily={commDailyUnits}
+                revhourMonthly={commRevhourMonthly} revhourWeekly={commRevhourWeekly} />
+            </div>
+          )}
+        </div>
       </div>
     </div>
   );
@@ -2444,6 +2735,12 @@ export default function PerformanceTracker({ initialLocTypes, initialPractices, 
   const [dailyMetricsProviderData, setDailyMetricsProviderData] = useState([]);
   const [dailyBtxProviderDataRaw, setDailyBtxProviderData] = useState([]);
   const [dailySyringeProvData, setDailySyringeProvData] = useState([]);
+  // Section E — Consultation Commercial Success Tracking feeds (re-derived commercial-kd metrics)
+  const [commMonthly, setCommMonthly] = useState([]);
+  const [commWeekly, setCommWeekly] = useState([]);
+  const [commDailyUnits, setCommDailyUnits] = useState([]);
+  const [commRevhourMonthly, setCommRevhourMonthly] = useState([]);
+  const [commRevhourWeekly, setCommRevhourWeekly] = useState([]);
   const [loading, setLoading] = useState(true);
 
   // Botox "exclude appointments with < 10 units" — parallel filtered datasets
@@ -2568,7 +2865,13 @@ export default function PerformanceTracker({ initialLocTypes, initialPractices, 
       fetch(`${BP}/data/performance/weekly-btx-ge10.json`).then(r => r.json()).catch(() => []),
       fetch(`${BP}/data/performance/weekly-btx-provider-ge10.json`).then(r => r.json()).catch(() => []),
       fetch(`${BP}/data/performance/daily-btx-provider-ge10.json`).then(r => r.json()).catch(() => []),
-    ]).then(([locs, met, daily, ops, btx, bud, injRevProv, btxProv, ntxFiller, syrLoc, syrProv, revCollProv, provHours, utilization, metricsProvData, opsProvData, utilHoursProvData, dailyInjRevProv, dailyRevCollProv, dailyMetricsProv, dailyBtxProv, dailySyrProv, monthlyBud, btxGe10, btxProvGe10, dailyBtxProvGe10]) => {
+      // Section E — Consultation Commercial Success Tracking feeds
+      fetch(`${BP}/data/commercial/commercial-monthly.json`).then(r => r.json()).catch(() => []),
+      fetch(`${BP}/data/commercial/commercial-weekly.json`).then(r => r.json()).catch(() => []),
+      fetch(`${BP}/data/commercial/commercial-daily-units.json`).then(r => r.json()).catch(() => []),
+      fetch(`${BP}/data/commercial/commercial-revhour-monthly.json`).then(r => r.json()).catch(() => []),
+      fetch(`${BP}/data/commercial/commercial-revhour-weekly.json`).then(r => r.json()).catch(() => []),
+    ]).then(([locs, met, daily, ops, btx, bud, injRevProv, btxProv, ntxFiller, syrLoc, syrProv, revCollProv, provHours, utilization, metricsProvData, opsProvData, utilHoursProvData, dailyInjRevProv, dailyRevCollProv, dailyMetricsProv, dailyBtxProv, dailySyrProv, monthlyBud, btxGe10, btxProvGe10, dailyBtxProvGe10, commMon, commWk, commDaily, commRhMon, commRhWk]) => {
       // Safety net: Avg Revenue per Patient reads fee/consult/vitamin-excluded twins
       // (sx/px/revx). If a daily refresh ever regenerates these feeds without the
       // twins, fall back to the raw fields so the metric degrades gracefully (reverts
@@ -2602,6 +2905,11 @@ export default function PerformanceTracker({ initialLocTypes, initialPractices, 
       setBtxDataGe10(btxGe10);
       setBtxProviderDataGe10(btxProvGe10);
       setDailyBtxProviderDataGe10(dailyBtxProvGe10);
+      setCommMonthly(commMon);
+      setCommWeekly(commWk);
+      setCommDailyUnits(commDaily);
+      setCommRevhourMonthly(commRhMon);
+      setCommRevhourWeekly(commRhWk);
       setLoading(false);
       // Mark data as loaded so cleanup effects can run
       // Use a timeout to let the first render with data settle before enabling cleanup
@@ -4752,6 +5060,11 @@ export default function PerformanceTracker({ initialLocTypes, initialPractices, 
             dailyMetricsProviderData={dailyMetricsProviderData}
             dailyBtxProviderData={dailyBtxProviderData}
             dailySyringeProvData={dailySyringeProvData}
+            commMonthly={commMonthly}
+            commWeekly={commWeekly}
+            commDailyUnits={commDailyUnits}
+            commRevhourMonthly={commRevhourMonthly}
+            commRevhourWeekly={commRevhourWeekly}
           />
         )}
 

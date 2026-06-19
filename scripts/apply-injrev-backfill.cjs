@@ -7,8 +7,15 @@
 //          center_name AS c, sold_by AS pr,
 //          ROUND(SUM(sales_exc_tax), 2) AS r
 //   FROM zenoti_<practice>.transformed_sales_accrual_flat_file_products_services
-//   WHERE sale_date BETWEEN <12 weeks ago> AND <today>
+//   WHERE sale_date BETWEEN <12 weeks ago> AND <today>   -- or use trailing window
 //     AND item_category = 'Injectables'
+//     AND item_sub_category IN ('Dermal Filler','Neuromodulators','Biostimulator Filler',
+//       'Kybella & Lipolysis','PRP & PRF','Injectables - Other')
+//     AND LOWER(item_name) NOT LIKE '%cancel%'
+//     AND LOWER(item_name) NOT LIKE '%no show%'
+//     AND LOWER(item_name) NOT LIKE '%no-show%'
+//     AND LOWER(item_name) NOT LIKE '%numbing%'
+//     AND LOWER(item_name) NOT LIKE '%lidocaine%'
 //     AND sold_by IS NOT NULL AND center_name IS NOT NULL
 //   GROUP BY 1, 2, 3
 //   HAVING SUM(sales_exc_tax) <> 0;
