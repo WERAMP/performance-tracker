@@ -1113,6 +1113,7 @@ function CommercialTrends({ location, grain, providers, monthly, weekly, daily, 
   const [monthsN, setMonthsN] = useState(12);
   const [weeksN, setWeeksN] = useState(13);
   const [pivotMode, setPivotMode] = useState('provider'); // 'provider' | 'kpi'
+  const [injGe10, setInjGe10] = useState(true); // per-visit blue line: only visits >=10 units (default on)
   const [selProv, setSelProv] = useState(null); // explorer By-Provider: the selected provider
   const [selKpi, setSelKpi] = useState('Total Injectables Sales'); // explorer By-KPI: the selected KPI
   const inSel = (pr) => providers === null || providers.has(pr);
@@ -1134,13 +1135,14 @@ function CommercialTrends({ location, grain, providers, monthly, weekly, daily, 
   const N = grain === 'weekly' ? weeksN : monthsN;
   const periods = (N === 'all') ? allPeriods : allPeriods.slice(-N);
   const agg = {};
-  allPeriods.forEach(p => { agg[p] = { neuro: { botox: 0, xeomin: 0, dysport: 0, daxxify: 0 }, fillerSyr: 0, injVisits: 0, fillerSales: 0, totalInj: 0, neuroRev: 0, a3: 0, a4: 0, a5: 0, trendSales: 0, trendVisits: 0 }; });
+  allPeriods.forEach(p => { agg[p] = { neuro: { botox: 0, xeomin: 0, dysport: 0, daxxify: 0 }, fillerSyr: 0, injVisits: 0, fillerSales: 0, totalInj: 0, neuroRev: 0, a3: 0, a4: 0, a5: 0, trendSales: 0, trendVisits: 0, eg10: 0, vg10: 0 }; });
   for (const r of rows) {
     const a = agg[r.p]; if (!a) continue;
     a.fillerSyr += r.filler_syr || 0; a.injVisits += r.inj_visits || 0;
     a.fillerSales += r.filler_sales || 0; a.totalInj += r.total_inj || 0;
     a.neuroRev += r.neuro_rev || 0; a.a3 += r.a3 || 0; a.a4 += r.a4 || 0; a.a5 += r.a5 || 0;
     a.trendSales += r.trend_sales || 0; a.trendVisits += r.trend_visits || 0;
+    a.eg10 += r.eg10 || 0; a.vg10 += r.vg10 || 0;
     for (const [bucket, units] of Object.entries(r.brands || {})) {
       const eq = brandEquiv(bucket, units, location);
       if (eq) a.neuro[eq.brand] += eq.units;
@@ -1329,7 +1331,15 @@ function CommercialTrends({ location, grain, providers, monthly, weekly, daily, 
       </ChartCard>
 
       <ChartCard title={`Neurotoxin Units (Botox-Equiv) per Injectables Visit & Filler Syringes per Injectables Visit — ${grainWord}`} info={`${METRIC_INFO['Neuro Units / Visit']} Filler Syringes / Visit = filler syringes ÷ injectable visits.`}>
-        <CommChart data={mk(p => ({ 'Neuro Units / Inj. Visit': agg[p].injVisits > 0 ? Math.round(neuroTotal(p) / agg[p].injVisits * 10) / 10 : 0, 'Filler Syringes / Inj. Visit': agg[p].injVisits > 0 ? Math.round(agg[p].fillerSyr / agg[p].injVisits * 100) / 100 : 0 }))}
+        <label style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 11, fontFamily: FONT.body, color: V.navy, marginBottom: 8, cursor: 'pointer' }}>
+          <input type="checkbox" checked={injGe10} onChange={(e) => setInjGe10(e.target.checked)} style={{ cursor: 'pointer', accentColor: V.navy }} />
+          Only count visits with ≥10 units of Botox-equiv (blue line)
+        </label>
+        <CommChart data={mk(p => ({
+            'Neuro Units / Inj. Visit': injGe10
+              ? (agg[p].vg10 > 0 ? Math.round(agg[p].eg10 / agg[p].vg10 * 10) / 10 : 0)
+              : (agg[p].injVisits > 0 ? Math.round(neuroTotal(p) / agg[p].injVisits * 10) / 10 : 0),
+            'Filler Syringes / Inj. Visit': agg[p].injVisits > 0 ? Math.round(agg[p].fillerSyr / agg[p].injVisits * 100) / 100 : 0 }))}
           series={['Neuro Units / Inj. Visit', 'Filler Syringes / Inj. Visit']} rightAxisSeries={['Filler Syringes / Inj. Visit']}
           formatter={fmtNum1} rightAxisFormatter={fmtNum2} colorMap={perVisitColor} />
       </ChartCard>

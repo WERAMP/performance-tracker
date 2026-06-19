@@ -60,6 +60,14 @@ function buildPeriodFeed(grain) {
   for (const r of cache(NAMES.trend)) { if (!keep(r)) continue; const x = get(r[pk], r.center_name, r.staff_member, r.practice); x.trend_sales = r2(r.total_sales); x.trend_visits = ri(r.unique_visits); }
   for (const r of cache(NAMES.brand)) { if (!keep(r)) continue; const x = get(r[pk], r.center_name, r.staff_member, r.practice); x.brands[r.brand_bucket] = r2((x.brands[r.brand_bucket] || 0) + num(r.raw_units)); }
 
+  // ≥10-unit visit metrics for the per-visit chart toggle: eg10 = Botox-equiv neuro
+  // units on visits with >=10 Botox-equiv units, vg10 = count of those visits.
+  // Sourced from COMMERCIAL_GE10.json (invoice-grain pull) — see SYNC-COMMERCIAL.md.
+  let ge10 = { monthly: [], weekly: [] };
+  try { ge10 = JSON.parse(fs.readFileSync(path.join(SD, '.commercial-cache', 'COMMERCIAL_GE10.json'), 'utf8')); } catch (e) { /* feeds emit eg10/vg10=0 if absent */ }
+  const gmap = new Map((ge10[W ? 'weekly' : 'monthly'] || []).map(x => [`${x.p}|${x.c}|${x.pr}`, x]));
+  for (const row of rows.values()) { const x = gmap.get(key(row.p, row.c, row.pr)); row.eg10 = x ? x.eg10 : 0; row.vg10 = x ? x.vg10 : 0; }
+
   return [...rows.values()];
 }
 
