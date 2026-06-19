@@ -2657,7 +2657,7 @@ function LocationReport({ location, locations, metrics, dailyMetrics, opsData, b
           </div>
         )}
 
-        {/* ── Section E: Consultation Commercial Success Tracking ── */}
+        {/* ── Section E: Provider Productivity ── */}
         <div style={{ marginBottom: 28 }}>
           <div style={{
             display: 'flex', alignItems: 'center', justifyContent: 'space-between',
@@ -2667,7 +2667,7 @@ function LocationReport({ location, locations, metrics, dailyMetrics, opsData, b
             <button onClick={() => toggleSection('commercial')}
               style={{ display: 'flex', alignItems: 'center', gap: 8, flex: 1, background: 'none', border: 'none', cursor: 'pointer', textAlign: 'left', padding: 0 }}>
               <span style={{ fontSize: 10, fontWeight: 700, color: V.gold, letterSpacing: 1.5, textTransform: 'uppercase', fontFamily: FONT.body }}>E.</span>
-              <span style={{ fontSize: 13, fontFamily: FONT.body, fontWeight: 600, color: V.navy }}>Consultation Commercial Success Tracking</span>
+              <span style={{ fontSize: 13, fontFamily: FONT.body, fontWeight: 600, color: V.navy }}>Provider Productivity</span>
               {commProviders !== null && commProviders.size < commProviderNames.length && (
                 <span style={{ fontSize: 9, fontFamily: FONT.body, color: V.gold, background: V.navy, padding: '2px 7px', borderRadius: 10, marginLeft: 4 }}>
                   {commProviders.size} provider{commProviders.size !== 1 ? 's' : ''}
