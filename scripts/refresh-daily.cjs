@@ -241,6 +241,56 @@ console.log(`W = ${W} (derived from ${q1Data.length > 0 ? 'q1' : 'q3 — early M
 const locations = JSON.parse(fs.readFileSync(path.join(BASE, 'locations.json'), 'utf8'));
 const knownCenters = new Set(locations.map(l => l.name));
 
+// ── Data quality sanity check ─────────────────────────────────────────────────
+// Guards against AI-fabricated data that passes the freshness check but has
+// wrong values (e.g. inflated round numbers, missing entire days). Root cause:
+// context compaction in a scheduled session can cause the AI to lose real query
+// results and invent plausible-looking but incorrect data (incident: 2026-06-22).
+(function validateDataQuality() {
+  const q1 = readInput('q1.json');
+  const q8 = readInput('q8.json');
+  const q9 = readInput('q9.json');
+  const errors = [];
+
+  // Q8: 7-day lookback must cover at least 5 distinct calendar dates.
+  // Fabricated data had zeros for entire days (missing Tue, Fri, Sat) leaving
+  // only 4 dates — this check catches that pattern without needing expected values.
+  const q8Dates = [...new Set(q8.map(r => r.d).filter(Boolean))];
+  if (q8Dates.length < 5) {
+    errors.push(`DATA_QUALITY q8.json: only ${q8Dates.length} unique dates in 7-day lookback (expected ≥5). Dates found: ${q8Dates.sort().join(', ')}. Possible fabricated or truncated data.`);
+  }
+
+  // Q8: minimum row count — 7-day × ~50 locations = 350 rows expected; 100 is a
+  // very conservative floor. Fabricated file had ~160 rows (only 4 dates × fewer locations).
+  if (q8.length < 100) {
+    errors.push(`DATA_QUALITY q8.json: only ${q8.length} rows — expected ≥100 for a 7-day lookback across 50+ locations`);
+  }
+
+  // Q9: same date-coverage check for daily collections
+  const q9Dates = [...new Set(q9.map(r => r.d).filter(Boolean))];
+  if (q9Dates.length < 5) {
+    errors.push(`DATA_QUALITY q9.json: only ${q9Dates.length} unique dates in 7-day lookback (expected ≥5). Dates found: ${q9Dates.sort().join(', ')}`);
+  }
+
+  // Q1 non-earlyMonday: at least 20 locations must have s > 0
+  if (!earlyMonday && q1.length > 0) {
+    const locWithSales = q1.filter(r => parseFloat(r.s) > 0).length;
+    if (locWithSales < 20) {
+      errors.push(`DATA_QUALITY q1.json: only ${locWithSales} of ${q1.length} locations have weekly revenue > $0 — expected ≥20 on a live week`);
+    }
+  }
+
+  if (errors.length) {
+    console.error('\n=== DATA QUALITY CHECK FAILED ===');
+    for (const e of errors) console.error(e);
+    console.error('\nThis likely indicates fabricated or corrupted query results.');
+    console.error('Re-run ALL SQL queries against CorralData and verify results before proceeding.');
+    console.error('DO NOT build or push until all checks pass.\n');
+    process.exit(1);
+  }
+  console.log('data quality ok\n');
+})();
+
 // ── Q9: load daily collections (dataset 1237) — needed early for weekly co ───
 const q9Data = readInput('q9.json');
 
