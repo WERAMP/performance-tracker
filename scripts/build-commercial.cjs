@@ -100,11 +100,22 @@ function write(name, data) {
   console.log(`${name}: ${data.length} rows`);
 }
 
-const monthly = buildPeriodFeed('monthly');
-const weekly = buildPeriodFeed('weekly');
-write('commercial-monthly.json', monthly);
-write('commercial-weekly.json', weekly);
-write('commercial-revhour-monthly.json', buildRevHour('monthly'));
-write('commercial-revhour-weekly.json', buildRevHour('weekly'));
-write('commercial-daily-units.json', buildDailyUnits());
-console.log('Done. Centers:', new Set(monthly.map(r => r.c)).size, ' Providers:', new Set(monthly.map(r => r.pr)).size);
+function run() {
+  const monthly = buildPeriodFeed('monthly');
+  const weekly = buildPeriodFeed('weekly');
+  write('commercial-monthly.json', monthly);
+  write('commercial-weekly.json', weekly);
+  write('commercial-revhour-monthly.json', buildRevHour('monthly'));
+  write('commercial-revhour-weekly.json', buildRevHour('weekly'));
+  const daily = buildDailyUnits();
+  write('commercial-daily-units.json', daily);
+  // Staleness guard — Section E must track the rest of the refresh. The cache is only as
+  // fresh as the last .commercial-cache/ pull (bootstrap-commercial-cache.cjs or SYNC-COMMERCIAL.md).
+  const maxDay = daily.reduce((m, r) => (r.d > m ? r.d : m), '');
+  const today = new Date().toISOString().slice(0, 10);
+  const ageDays = maxDay ? Math.round((Date.parse(today) - Date.parse(maxDay)) / 86400000) : 999;
+  if (ageDays > 2) console.warn(`⚠️  commercial cache STALE: latest day ${maxDay} is ${ageDays}d old — Section E will not reflect recent data until .commercial-cache/ is re-pulled (see SYNC-COMMERCIAL.md).`);
+  console.log('Done. Centers:', new Set(monthly.map(r => r.c)).size, ' Providers:', new Set(monthly.map(r => r.pr)).size);
+}
+module.exports = { run };
+if (require.main === module) run();

@@ -1,5 +1,85 @@
 # Section E — Consultation Commercial Success Tracking (data refresh)
 
+> **Daily-refresh integration (2026-06-24).** Section E is now rebuilt by `refresh-daily.cjs`
+> on every run — it calls `build-commercial.cjs` then `apply-commercial-accuracy.cjs` at the
+> end (mirrors the `apply-exclusions` hook). **But the build only reflects fresh data if the
+> `scripts/.commercial-cache/` is re-pulled as part of the daily Corral pull** (the build
+> can't reach Corral itself — Corral is MCP/app-only). `build-commercial.cjs` prints a loud
+> `⚠️ commercial cache STALE` warning if the cache's newest day is >2d old, so a missed pull
+> is visible. Two cache pieces to refresh daily:
+> 1. The `DEMO_*` arrays — bootstrap from `commercial-kd-live/data.js` (`bootstrap-commercial-cache.cjs`)
+>    **only if that board itself ran today**, otherwise re-pull per the table below.
+> 2. `ACCURATE_INJ_SPLIT.json` — the accurate filler/neuron split that keeps Section C
+>    "Inj Revenue" == Section E "Total Injectables Sales" (and fills brands the commercial-kd
+>    `sales_data` CTE misses entirely, e.g. New Radiance). Pull per (center, sold_by, day):
+>    ```sql
+>    SELECT CAST(f.sale_date AS DATE) AS d, f.center_name AS c, TRIM(f.sold_by) AS pr,
+>      ROUND(SUM(CASE WHEN f.item_sub_category='Neuromodulators' THEN f.sales_exc_tax ELSE 0 END),2) AS neuro,
+>      ROUND(SUM(CASE WHEN f.item_sub_category IN ('Dermal Filler','Biostimulator Filler') THEN f.sales_exc_tax ELSE 0 END),2) AS filler
+>    FROM use_dataset(1237) f
+>    WHERE f.item_category='Injectables'
+>      AND f.item_sub_category IN ('Neuromodulators','Dermal Filler','Biostimulator Filler')
+>      AND LOWER(f.item_name) NOT LIKE '%cancel%' AND LOWER(f.item_name) NOT LIKE '%no show%'
+>      AND LOWER(f.item_name) NOT LIKE '%no-show%' AND LOWER(f.item_name) NOT LIKE '%numbing%' AND LOWER(f.item_name) NOT LIKE '%lidocaine%'
+>      AND TRIM(COALESCE(f.sold_by,''))<>'' AND CAST(f.sale_date AS DATE) >= DATE '2026-01-01'
+>    GROUP BY 1,2,3 HAVING ROUND(SUM(f.sales_exc_tax),2)<>0 ORDER BY 1,2,3;
+>    ```
+>    Save to `scripts/.commercial-cache/ACCURATE_INJ_SPLIT.json` as `{ "data": [ ... ] }`
+>    (paginate per the 3000-row cap — see [[corral-mcp-row-cap]] — and merge).
+>
+> **Daily-units (the "Daily Trends" tab) can be refreshed straight from dataset 1237** — no
+> dependence on the commercial-kd board (it lags). Pull per (day, center, sold_by) for the
+> trailing ~30 days and save to `scripts/.commercial-cache/DEMO_DAILY_UNITS.json` as
+> `{ "data":[ {day,staff_member,practice,center_name,botox_units,filler_syringes} ] }`:
+> ```sql
+> SELECT CAST(f.sale_date AS DATE) AS day, f.center_name, TRIM(f.sold_by) AS staff_member,
+>   ROUND(SUM(CASE WHEN f.item_name='Botox One Unit' THEN f.qty ELSE 0 END),2) AS botox_units,
+>   ROUND(SUM(CASE WHEN f.item_sub_category IN ('Dermal Filler','Biostimulator Filler') AND f.sales_exc_tax>0 THEN f.qty ELSE 0 END),2) AS filler_syringes
+> FROM use_dataset(1237) f
+> WHERE CAST(f.sale_date AS DATE) >= CURRENT_DATE - INTERVAL '30 days' AND TRIM(COALESCE(f.sold_by,''))<>''
+> GROUP BY 1,2,3 HAVING SUM(CASE WHEN f.item_name='Botox One Unit' THEN f.qty ELSE 0 END)<>0
+>   OR SUM(CASE WHEN f.item_sub_category IN ('Dermal Filler','Biostimulator Filler') AND f.sales_exc_tax>0 THEN f.qty ELSE 0 END)<>0;
+> ```
+> (Map `Ever/Body-Greenwich Village`→`Ever/Body-Greenwich`; attach `practice` from the centers
+> map. NOTE: this omits the injector job-title gate — it includes any `sold_by` seller, which
+> the board's gated query would drop. Close enough for the daily-units view; the monthly/weekly
+> units, visits, trend and rev/hour still come from the board.)
+>
+> **Self-sufficient (no board) path for the CORE period metrics (2026-06-25).** The daily
+> refresh now also runs `assemble-commercial-cache.cjs` (before `build-commercial`), which
+> builds the `DEMO_*`/`DEMO_WEEKLY_*` cache files for the **core** Trends metrics —
+> botox_units, filler_syringes, inj_visits, filler_sales/total_inj, neuro_rev, trend_sales,
+> trend_visits — straight from dataset 1237 + the injector gate, no commercial-kd board needed.
+> Refresh two pulls daily (paginate the 3000-row cap; older periods are kept from cache):
+> save to `.commercial-cache/CORE_MONTHLY.json` (group `DATE_TRUNC('month', sale_date)`, ≥ start
+> of the trailing window) and `.commercial-cache/CORE_WEEKLY.json` (`DATE_TRUNC('week', …)`),
+> shape `{data:[{p,c,pr,botox_units_sold,filler_syringes_sold,inj_visits,filler_sales,
+> total_injectables_sales,neuro_revenue,total_sales,unique_visits}]}`. The query (gate +
+> consult/touch-up exclusion for `unique_visits`) is the consolidated `base`/`ct` SQL used on
+> 2026-06-25 — see git history / the assembled cache. Map `Ever/Body-Greenwich Village`→`Ever/Body-Greenwich`.
+>
+> **All 3 secondary metrics now ALSO ported (2026-06-25) — Section E is fully Corral-driven.**
+> `assemble-commercial-cache.cjs` now also builds, from these daily pull inputs (merge older
+> periods from cache; map Greenwich; injector-gated via `zenoti_corp.employees`):
+> - `.commercial-cache/MS_MONTHLY.json` / `MS_WEEKLY.json` → `DEMO_(WEEKLY_)MULTI_SYRINGE`
+>   (per-invoice filler `SUM(qty)>=3`, count invoices =3/=4/>=5).
+> - `.commercial-cache/BRAND_MONTHLY.json` / `BRAND_WEEKLY.json` → `DEMO_(WEEKLY_)NEURO_UNITS_BRAND`
+>   (brand_bucket CASE on item_name + "Buy the Vial" unit parse `REGEXP_SUBSTR(item_name,'[0-9]+ *[Uu]nit')`).
+> - `.commercial-cache/REVHOUR_MONTHLY.json` / `REVHOUR_WEEKLY.json` → `DEMO_(WEEKLY_)REV_PER_HOUR`
+>   (service `SUM(sales_exc_tax)` by sold_by/practice LEFT JOIN `zenoti_corp.transformed_employee_schedules`
+>   `SUM(booked_hours)` by full_name/practice, both injector-gated). Exact SQL: git history / `tmp-sqls/`.
+>
+> Net: the FULL daily commercial pull is now CORE_MONTHLY/WEEKLY, MS_MONTHLY/WEEKLY,
+> BRAND_MONTHLY/WEEKLY, REVHOUR_MONTHLY/WEEKLY, DEMO_DAILY_UNITS, ACCURATE_INJ_SPLIT —
+> all from dataset 1237 (+ employees/schedules), no commercial-kd board dependency.
+>
+> **Durable upstream fix still owed:** the commercial-kd `sales_data` CTE excludes brands like
+> New Radiance entirely (shows $0) and lagged ~1-2 weeks. `apply-commercial-accuracy.cjs` only
+> patches injectable *revenue*; the other Section E metrics (units, visits, trend, rev/hour)
+> are still only as complete/fresh as commercial-kd. Fix the commercial-kd queries upstream to
+> remove the patch's need.
+
+
 Section E of the Location Performance Report reproduces the commercial-kd board's
 **Monthly / Weekly / Daily Trends**, scoped to one location and toggleable by provider.
 Its metrics are **re-derived from Corral with the same definitions as commercial-kd**, so

@@ -1,5 +1,27 @@
 # Daily refresh — canonical "Total Injectables Sales" definition
 
+> **⚠️ 2026-06-24 — provider "Inj Revenue" (Section C) REDEFINED to match Section E.**
+> Per request, the provider-card **Inj Revenue** (feed `q11` → `daily-/weekly-inj-rev-provider`)
+> now uses the **Section E "Total Injectables Sales"** definition so the two views agree:
+> `item_sub_category IN ('Neuromodulators','Dermal Filler','Biostimulator Filler')`,
+> attributed to **`sold_by`** (not serviced_by), `SUM(sales_exc_tax)`, same cancel/no-show/
+> numbing/lidocaine exclusions. **q11's `r` should use this**, not the 6-subcategory
+> serviced_by definition below. The **location-level `inj`** on q1/q8/q10 (Sections A/B)
+> is UNCHANGED — still the canonical 6-subcategory serviced_by definition below. (So
+> provider Inj Revenue and location injectable totals now use *different* scopes — by design.)
+> Applied on localhost via `_reheal-inj.cjs`; fold the new q11 into the refresh to make durable.
+>
+> **Section E ("Total Injectables Sales", commercial-kd feeds) was ALSO rehealed** to the
+> same accurate definition (`_reheal-commercial.cjs`, overwriting `filler_sales`+`neuro_rev`
+> in `commercial-monthly.json`/`commercial-weekly.json`), so Sections C and E now agree AND
+> are accurate. The commercial-kd pipeline had been **stale and missing brands** (e.g. New
+> Radiance providers showed $0; Ever/Body-Flatiron/Janna Sheire $79.5k vs $88.3k actual) —
+> the durable fix is to correct the commercial-kd build itself, upstream. Known residual:
+> **Ever/Body-Bethesda Row** is absent from all performance provider feeds (rev/metrics/inj)
+> — a separate pre-existing coverage gap; it has no Section C cards.
+>
+> The text below documents the original (location-level) canonical definition.
+
 The tracker's injectable-revenue fields (`inj` on q1/q8/q10, `r` on q11) MUST use the
 **canonical injectables definition** agreed with v_KD (`ampintelligence.ai/commercial-kd`)
 on 2026-06-18. This file is the durable record of that definition so every daily refresh

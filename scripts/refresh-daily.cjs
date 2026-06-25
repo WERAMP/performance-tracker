@@ -35,6 +35,21 @@
 //   q-btx-ge10.json         — botox appts >=10 units by provider-week
 //   q-btx-vial.json         — "Botox 100 Units" (Service) add by provider-week
 //
+//   --- Section E (Provider Productivity) inputs — REQUIRED for E to update daily ---
+//   Section E rebuilds at the end of this refresh (assemble-commercial-cache ->
+//   build-commercial -> apply-commercial-accuracy), fully from Corral (no commercial-kd
+//   board). Refresh these .commercial-cache pulls as part of the daily Corral pull or
+//   Section E goes stale (build-commercial prints a STALE warning). See SYNC-COMMERCIAL.md
+//   for the exact SQL. All are per (period, center, sold_by), injector-gated:
+//   .commercial-cache/CORE_MONTHLY.json + CORE_WEEKLY.json   — botox_units, filler_syringes,
+//       inj_visits, filler_sales, total_injectables_sales, neuro_revenue, total_sales, unique_visits
+//   .commercial-cache/MS_MONTHLY.json + MS_WEEKLY.json       — multi-syringe appts (3/4/5+)
+//   .commercial-cache/BRAND_MONTHLY.json + BRAND_WEEKLY.json — neuromodulator units by brand bucket
+//   .commercial-cache/REVHOUR_MONTHLY.json + REVHOUR_WEEKLY.json — service sales + scheduled hours
+//   .commercial-cache/DEMO_DAILY_UNITS.json                 — last-30d daily botox/filler units
+//   .commercial-cache/ACCURATE_INJ_SPLIT.json               — per (center,sold_by,day) neuro+filler;
+//       drives the accurate "Inj Revenue" (Section C) == "Total Injectables Sales" (Section E)
+//
 // NOTE: No q2.json — weekly co is derived from q9 daily data for accuracy.
 
 const fs = require('fs');
@@ -546,6 +561,32 @@ try {
   require('./apply-exclusions.cjs').run();
 } catch (e) {
   console.warn('apply-exclusions skipped due to error:', e.message);
+}
+
+// ── Section E (Provider Productivity) — rebuild commercial feeds every refresh ──
+// Section E was historically NOT part of this refresh (built by a separate manual
+// bootstrap off the commercial-kd board), so it went stale while Sections A–D updated.
+// It is now fully Corral-driven: assemble-commercial-cache builds the DEMO_* cache from
+// the daily Corral pulls (CORE/MS/BRAND/REVHOUR ×monthly,weekly + DEMO_DAILY_UNITS), then
+// build-commercial -> the feeds, then apply-commercial-accuracy re-applies the agreed
+// filler+neuro (sold_by) definition so Section C "Inj Revenue" == Section E "Total
+// Injectables Sales". Refresh those .commercial-cache pulls daily — see SYNC-COMMERCIAL.md;
+// build-commercial warns loudly if the cache is stale. Each step is best-effort (try/catch)
+// so a missing commercial pull never blocks the Sections A–D refresh.
+try {
+  require('./assemble-commercial-cache.cjs').run();
+} catch (e) {
+  console.warn('assemble-commercial-cache skipped due to error:', e.message);
+}
+try {
+  require('./build-commercial.cjs').run();
+} catch (e) {
+  console.warn('build-commercial skipped due to error:', e.message);
+}
+try {
+  require('./apply-commercial-accuracy.cjs').run();
+} catch (e) {
+  console.warn('apply-commercial-accuracy skipped due to error:', e.message);
 }
 
 console.log('\n=== Done ===');

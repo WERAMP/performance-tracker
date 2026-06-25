@@ -458,7 +458,7 @@ function ChartCard({ title, tooltip, children, width = '100%', height, headerRig
 const METRIC_INFO = {
   // ── Header summary cards ──
   'Sales': 'Total service + product sales for the location over the selected period, excluding tax (sum of sales_exc_tax). Memberships, packages and gift cards are excluded — membership revenue is counted when it is redeemed as a service.',
-  'Collections': 'Cash actually collected over the period (payments received), regardless of when the item was sold.',
+  'Collections': 'Cash actually collected over the period (payments received), including service sales, product sales, gift cards, packages, etc.',
   'Rev / Patient': 'Average revenue per unique patient, excluding no-show/cancellation fees = fee-excluded sales ÷ unique patients.',
   'Utilization': 'Share of providers’ bookable hours that were booked = booked hours ÷ available hours, averaged across weeks (zero-utilization weeks excluded).',
   'Cancel + NS': 'Combined cancellation + no-show rate = (% of appointments cancelled) + (% no-show), weighted by appointment count.',
@@ -481,7 +481,7 @@ const METRIC_INFO = {
   'Avg Net Provider Hours/Week': 'Average net (worked) provider hours per week.',
   // ── Section C: Provider Performance cards ──
   'Total Revenue': 'This provider’s total revenue (all categories) over the period; products are credited to the seller (sold_by).',
-  'Inj Revenue': 'This provider’s injectable revenue (canonical injectables definition), credited to the servicing provider.',
+  'Inj Revenue': 'Filler + neurotoxin revenue (Neuromodulators, Dermal Filler, Biostimulator Filler; sales_exc_tax), credited to the seller (sold_by) — same definition as “Total Injectables Sales” in Provider Productivity.',
   'Avg Syr/Inj Appt': 'Average syringes per injectable appointment for this provider.',
   'Avg Syr/Filler Appt': 'Average syringes per filler appointment for this provider.',
   'Collections %': 'This provider’s collections ÷ revenue × 100.',
