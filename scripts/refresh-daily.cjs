@@ -430,7 +430,12 @@ replaceWeek('weekly-metrics-provider.json', metricsProvRows);
 const q11Data = readInput('q11.json');
 const injRevProvRows = q11Data.filter(r => knownCenters.has(r.c) && r.pr != null)
   .map(r => ({ w: r.w || W, c: r.c, pr: r.pr, r: ff(r.r) || 0 }));
-replaceWeeks('weekly-inj-rev-provider.json', injRevProvRows);
+// NOTE (2026-06-25): "Inj Revenue" is now the Section-E definition (filler+neuron, sold_by),
+// owned by apply-commercial-accuracy.cjs which writes weekly-/daily-inj-rev-provider from
+// ACCURATE_INJ_SPLIT at the end of the refresh. We intentionally DON'T write the canonical
+// (serviced_by) inj here anymore — doing so would revert the redefinition on any run that
+// lacks today's ACCURATE_INJ_SPLIT pull. q11 is retained for reference/back-compat only.
+// (was: replaceWeeks('weekly-inj-rev-provider.json', injRevProvRows);)
 
 // ── 10. WEEKLY-REV-COLL-PROVIDER ─────────────────────────────────────────────
 const q12Data = readInput('q12.json');
@@ -497,13 +502,8 @@ function replaceDailyWeek(file, newRows) {
   console.log(`${file}: ${removed} removed (${W} week), ${newRows.length} added -> total=${merged.length}, latest=${wDates[wDates.length - 1]}`);
 }
 
-// daily-inj-rev-provider: r is weekly total → divide by 7
-const dailyInjRevProv = [];
-for (const r of injRevProvRows.filter(rr => rr.w === W)) {
-  for (const d of wDates)
-    dailyInjRevProv.push({ d, c: r.c, pr: r.pr, r: Math.round((r.r / WEEK_DAYS) * 100) / 100 });
-}
-replaceDailyWeek('daily-inj-rev-provider.json', dailyInjRevProv);
+// daily-inj-rev-provider: owned by apply-commercial-accuracy.cjs (Section-E definition),
+// NOT regenerated from canonical q11 here — see note at §9. (was: weekly/7 spread + replaceDailyWeek)
 
 // daily-metrics-provider: s/p/rt/inj are weekly totals → divide by 7
 const dailyMetricsProv = [];
