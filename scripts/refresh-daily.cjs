@@ -573,20 +573,24 @@ try {
 // Injectables Sales". Refresh those .commercial-cache pulls daily — see SYNC-COMMERCIAL.md;
 // build-commercial warns loudly if the cache is stale. Each step is best-effort (try/catch)
 // so a missing commercial pull never blocks the Sections A–D refresh.
-try {
-  require('./assemble-commercial-cache.cjs').run();
-} catch (e) {
-  console.warn('assemble-commercial-cache skipped due to error:', e.message);
+// DURABILITY GUARD: only rebuild Section E when TODAY's commercial pull is present.
+// If the operator didn't pull the .commercial-cache inputs this run, we must NOT rebuild
+// from a stale/old cache (that would REVERT the committed, correct Section E + Inj Revenue
+// to old/stale values). Instead we skip the whole commercial block and leave the committed
+// feeds exactly as deployed. CORE_MONTHLY.json is the sentinel (fresh = mtime today).
+const COMM_CACHE = path.join(__dirname, '.commercial-cache');
+function freshToday(f) {
+  try { const m = fs.statSync(path.join(COMM_CACHE, f)).mtime; return m.toISOString().slice(0, 10) === new Date().toISOString().slice(0, 10); }
+  catch { return false; }
 }
-try {
-  require('./build-commercial.cjs').run();
-} catch (e) {
-  console.warn('build-commercial skipped due to error:', e.message);
-}
-try {
-  require('./apply-commercial-accuracy.cjs').run();
-} catch (e) {
-  console.warn('apply-commercial-accuracy skipped due to error:', e.message);
+if (freshToday('CORE_MONTHLY.json')) {
+  try { require('./assemble-commercial-cache.cjs').run(); } catch (e) { console.warn('assemble-commercial-cache skipped due to error:', e.message); }
+  try { require('./build-commercial.cjs').run(); } catch (e) { console.warn('build-commercial skipped due to error:', e.message); }
+  try { require('./apply-commercial-accuracy.cjs').run(); } catch (e) { console.warn('apply-commercial-accuracy skipped due to error:', e.message); }
+} else {
+  console.warn('\n⚠️  SECTION E NOT REBUILT — no fresh commercial pull today (.commercial-cache/CORE_MONTHLY.json).');
+  console.warn('   Committed Section E + Inj Revenue feeds left AS-IS (not reverted). To refresh Section E,');
+  console.warn('   pull the commercial inputs per scripts/SYNC-COMMERCIAL.md, then re-run this refresh.');
 }
 
 console.log('\n=== Done ===');
