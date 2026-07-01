@@ -78,6 +78,12 @@ function writeJson(f, data) {
 }
 function fc(v) { return Math.round(parseFloat(v) || 0); }
 function ff(v) { const n = parseFloat(v); return isNaN(n) ? null : Math.round(n * 100) / 100; }
+// fd = dollars to the cent (2 decimals), never null. Used for the DAILY feed's
+// money fields (s/co/rt/inj) so period sums reconcile to Zenoti exactly instead
+// of drifting a few dollars from whole-dollar-per-day rounding. Patient COUNTS
+// stay integer (fc). The UI still shows whole dollars (tiles Math.round; fmtDollar
+// rounds). apply-exclusions derives `sx` from `s` at 2–4dp, so this stays coherent.
+function fd(v) { return Math.round((parseFloat(v) || 0) * 100) / 100; }
 
 function replaceWeek(file, newRows) {
   const existing = readJson(file);
@@ -392,12 +398,12 @@ const LOOKBACK_START = q8Data.map(r => r.d).sort()[0];
 const dailyCollMap = {};
 for (const r of q9Data) {
   if (!dailyCollMap[r.d]) dailyCollMap[r.d] = {};
-  if (knownCenters.has(r.c)) dailyCollMap[r.d][r.c] = Math.round(parseFloat(r.co) || 0);
+  if (knownCenters.has(r.c)) dailyCollMap[r.d][r.c] = fd(r.co);
 }
 const dailyRows = q8Data.filter(r => knownCenters.has(r.c)).map(r => ({
   d: r.d, c: r.c,
-  s: fc(r.s), co: (dailyCollMap[r.d] && dailyCollMap[r.d][r.c]) || 0,
-  p: fc(r.p), rt: fc(r.rt), inj: fc(r.inj)
+  s: fd(r.s), co: (dailyCollMap[r.d] && dailyCollMap[r.d][r.c]) || 0,
+  p: fc(r.p), rt: fd(r.rt), inj: fd(r.inj)
 }));
 // DURABILITY: only touch days within the lookback window so a full-history q8
 // pull can't overwrite committed historical daily `inj` (canonical backfill).

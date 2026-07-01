@@ -150,7 +150,9 @@ const fmtK = (v) => {
   if (v >= 1000) return `$${(v / 1000).toFixed(0)}K`;
   return `$${v}`;
 };
-const fmtDollar = (v) => v == null ? '' : `$${v?.toLocaleString()}`;
+// daily-metrics money fields are stored to the cent (so period sums reconcile to
+// Zenoti exactly); round at display so tables/charts still read in whole dollars.
+const fmtDollar = (v) => v == null ? '' : `$${Math.round(v).toLocaleString()}`;
 const fmtPct = (v) => v == null ? '' : `${v}%`;
 
 function formatWeek(dateStr) {
