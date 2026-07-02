@@ -155,8 +155,25 @@ console.log(`\nwrote daily-metrics.json + weekly-metrics.json (public${fs.exists
 if (NO_EXCL) {
   console.log('--no-exclusions: skipped apply-exclusions (sx/px NOT recomputed).');
 } else if (exclInputs.length) {
+  // apply-exclusions is monolithic: whenever q-revpat-center is present it also
+  // rewrites the PROVIDER feeds' sx/revx — and if q-revpat-provider is absent it
+  // would zero their exclusions. Since a center-level reconcile doesn't re-pull
+  // provider metrics, snapshot those provider feeds and restore them afterward
+  // unless a provider rev/patient input was supplied.
+  const guardProvider = fs.existsSync(path.join(__dirname, 'q-revpat-center.json'))
+    && !fs.existsSync(path.join(__dirname, 'q-revpat-provider.json'));
+  const provFeeds = ['weekly-metrics-provider.json', 'daily-metrics-provider.json', 'daily-rev-coll-provider.json'];
+  const snap = {};
+  if (guardProvider) for (const f of provFeeds) { try { snap[f] = fs.readFileSync(path.join(BASE, f), 'utf8'); } catch (e) {} }
   console.log('\nrunning apply-exclusions to recompute sx/px from the fresh s/p…');
   require('./apply-exclusions.cjs').run();
+  if (guardProvider) {
+    for (const f of provFeeds) if (snap[f] !== undefined) {
+      fs.writeFileSync(path.join(BASE, f), snap[f]);
+      if (fs.existsSync(DIST)) fs.writeFileSync(path.join(DIST, f), snap[f]);
+    }
+    console.log('restored provider feeds (no q-revpat-provider.json — provider sx left as committed; supply it to reconcile Section C too).');
+  }
 } else {
   console.log('no exclusion inputs present — skipped apply-exclusions.');
 }

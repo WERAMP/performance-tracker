@@ -110,6 +110,16 @@ rm -f scripts/qm-*.json scripts/q-revpat-*.json   # transient inputs (git-ignore
 - **Scope:** center-level (KPI tiles + weekly Revenue chart + Rev/Patient). Provider
   cards (Section C) and ops/botox are only reconciled if you also drop their
   month-wide inputs (provider metrics feeds + the other `SYNC-EXCLUSIONS.md` pulls).
+- **Provider-feed guard:** `apply-exclusions` also rewrites provider `sx`/`revx`
+  whenever `q-revpat-center.json` is present. If you did NOT supply
+  `q-revpat-provider.json`, `reconcile-month` snapshots the provider feeds
+  (`weekly-/daily-metrics-provider`, `daily-rev-coll-provider`) and restores them
+  after, so a center-only reconcile never zeroes provider exclusions. Supply
+  `q-revpat-provider.json` (SYNC-EXCLUSIONS #2) to reconcile Section C too.
+- Large fleet pulls exceed the MCP's inline limit and **auto-save to a
+  `…/tool-results/…txt` file** (`{data,columns}`); read that file and reshape the
+  cent columns (`s_c/100`, …) — don't hand-transcribe. Daily is ~1,800 rows/month
+  (under the 3k cap); pull per-month to stay under it.
 - Inputs are git-ignored (`scripts/q*.json`), like the daily `q1.json`…`q17.json`.
 - A reconcile is a **moment-in-time** tie: the tracker is a snapshot, so a month can
   drift again as new refunds post. Re-run when precision matters (e.g. at close).
