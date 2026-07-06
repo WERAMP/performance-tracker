@@ -49,10 +49,14 @@ const NAME_MAP = {
   'H-MD Medical Spa - Chisholm Creek': 'H-MD-Chisholm Creek',
   'H-MD Medical Spa - Tulsa': 'H-MD-Tulsa',
   'H-MD Medical Spa': 'H-MD-Gaillardia',       // renamed in tracker 2026-02-23
+  'Lift Aesthetics': 'Destination Aesthetics - Napa',
   'Mainline - Ardmore': 'Mainline Center for Laser Surgery',
 };
 // Tracker centers absent from Corral — keep their committed baseline rows.
-const CARRY_OVER = ['Destination Aesthetics - Napa'];
+const CARRY_OVER = [];
+// Corral centers deliberately dropped from the tracker (closed locations) —
+// skip so a re-sync doesn't reintroduce their budget rows.
+const EXCLUDE = ['Ever/Body-Bethesda Row'];
 
 // ── helpers ────────────────────────────────────────────────────────────────
 // Robust numeric parse: strips $, commas, spaces, stray text. "$107,481" -> 107481
@@ -92,7 +96,7 @@ function indexGoals(rows, idToCenter, buildIds) {
     } else {
       center = (cid && idToCenter[cid]) || NAME_MAP[loc] || loc;
     }
-    if (!center) continue;
+    if (!center || EXCLUDE.includes(center)) continue;
     const mk = monthKey(r.month);
     const goal = Math.round(num(r.goal));
     if (!goal) continue;                               // skip blank/zero goals
