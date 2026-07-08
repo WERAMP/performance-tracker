@@ -59,6 +59,7 @@ WITH grp AS (
     MAX(CASE WHEN cancel_or_no_show_status='-2' THEN 1 ELSE 0 END) AS is_ns
   FROM use_dataset(754)
   WHERE appt_date >= DATE_TRUNC('week', CURRENT_DATE) - INTERVAL '4 weeks'
+    AND appt_date < DATE_TRUNC('week', CURRENT_DATE) + INTERVAL '7 days'
   GROUP BY 1,2,3
 )
 SELECT c, w::text AS w,
@@ -68,9 +69,11 @@ SELECT c, w::text AS w,
 FROM grp GROUP BY c, w ORDER BY c, w;
 ```
 
+⚠️ **Upper bound is mandatory.** Dataset 754 contains future-dated appointments (patients booking weeks/months ahead). Without the `appt_date < DATE_TRUNC('week', CURRENT_DATE) + INTERVAL '7 days'` cap, this query pulls every future week too — pushing the row count past CorralData's 3,000-row silent-truncation cap (`truncated:false` even when rows are dropped). That silently drops recent weeks from the middle of the intended 5-week window. Always verify with a `COUNT(*)` on `(c, w)` or `(c, pr, w)` if the returned row count lands suspiciously close to 3000.
+
 ## 4 → `scripts/q-ops-keep-provider.json`  `[{c,pr,w,t_keep,can_keep,ns_keep}]`
 Same as #3 but add `MAX(therapist_first_name || ' ' || therapist_last_name) AS pr` in `grp`,
-group the outer query by `c, pr, w`, and `WHERE pr IS NOT NULL`.
+group the outer query by `c, pr, w`, and `WHERE pr IS NOT NULL`. Same upper-bound requirement applies.
 
 ## 5 → `scripts/q-btx-ge10.json`  `[{c,pr,w,n,total_qty}]`
 Unit rule: a "Botox/Xeomin 100 Units" service line (qty=1 = one 100u vial) counts as
