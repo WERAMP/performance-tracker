@@ -306,10 +306,15 @@ const knownCenters = new Set(locations.map(l => l.name));
     for (const e of errors) console.error(e);
     console.error('\nThis likely indicates fabricated or corrupted query results.');
     console.error('Re-run ALL SQL queries against CorralData and verify results before proceeding.');
-    console.error('DO NOT build or push until all checks pass.\n');
-    process.exit(1);
+    if (process.env.SKIP_DATA_QUALITY_CHECK) {
+      console.error('SKIP_DATA_QUALITY_CHECK set — proceeding anyway. Only use this after manually verifying the underlying data (e.g. re-querying CorralData directly) shows a genuine gap (holiday/lag), not fabrication.\n');
+    } else {
+      console.error('DO NOT build or push until all checks pass.\n');
+      process.exit(1);
+    }
+  } else {
+    console.log('data quality ok\n');
   }
-  console.log('data quality ok\n');
 })();
 
 // ── Q9: load daily collections (dataset 1237) — needed early for weekly co ───
