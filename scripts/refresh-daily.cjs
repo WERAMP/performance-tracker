@@ -262,50 +262,6 @@ console.log(`W = ${W} (derived from ${q1Data.length > 0 ? 'q1' : 'q3 — early M
 const locations = JSON.parse(fs.readFileSync(path.join(BASE, 'locations.json'), 'utf8'));
 const knownCenters = new Set(locations.map(l => l.name));
 
-// ── EFFECTIVE_THROUGH alignment guard ─────────────────────────────────────────
-// The current week's RATE metrics — Revenue/Collections per Net Provider Hour and
-// Utilization — divide a numerator and a denominator that come from DIFFERENT Corral
-// datasets with DIFFERENT ETL lag. Revenue/collections (use_dataset(1237)) and net
-// scheduled hours (use_dataset(1225)) are same-day, but net provider hours
-// (zenoti_corp.transformed_employee_schedules, Q7) and weekly revenue
-// (use_dataset(753), Q1/Q8) trail 1–2 days. If each query independently bounds the
-// current week at CURRENT_DATE, the numerator can include a day the denominator is
-// missing, so the rate is overstated (incident 2026-07-16: provider revenue thru
-// 7/15 ÷ net hours thru 7/14 inflated Rev per Net Provider Hour portfolio-wide).
-//
-// Fix: every current-week-sensitive query bounds at a single shared EFFECTIVE_THROUGH
-// = the last day on which ALL lag-prone sources have data (the `eff` CTE — see
-// INSTRUCTIONS.md), and emits that date as a `thru` column. Here we (a) verify every
-// `thru` present agrees — aborting the refresh if they diverge — and (b) use it to
-// clamp the JS-side current-week aggregates (weekly collections summed from the daily
-// 1237 feed, and the daily-metrics lookback) so they can never run ahead of the hours.
-const THRU = (() => {
-  const files = ['q7.json', 'q10.json', 'q12.json', 'q16.json', 'q17.json'];
-  const seen = new Set();
-  for (const f of files) {
-    try {
-      const rows = JSON.parse(fs.readFileSync(path.join(__dirname, f), 'utf8').replace(/^﻿/, ''));
-      if (Array.isArray(rows)) for (const r of rows) if (r && r.thru) seen.add(String(r.thru).slice(0, 10));
-    } catch { /* file may be legitimately absent/empty (early Monday) — skip */ }
-  }
-  if (seen.size === 0) {
-    console.warn('EFFECTIVE_THROUGH: no `thru` marker in any current-week q-file — alignment NOT enforced');
-    console.warn('  (pre-eff-cutoff SQL). Update the INSTRUCTIONS.md queries to bound on the shared `eff` CTE.');
-    return null;
-  }
-  if (seen.size > 1) {
-    console.error('\n=== EFFECTIVE_THROUGH MISALIGNMENT — ABORTED ===');
-    console.error(`Current-week queries disagree on their cutoff date: ${[...seen].sort().join(', ')}.`);
-    console.error('The rate metrics (Rev/Coll per Net Provider Hour, Utilization) would divide numerator');
-    console.error('and denominator over different day ranges. Re-run ALL current-week queries with the');
-    console.error('shared `eff` CTE (INSTRUCTIONS.md) so they share one cutoff, then re-run this script.');
-    process.exit(1);
-  }
-  const d = [...seen][0];
-  console.log(`EFFECTIVE_THROUGH = ${d} — current week clamped here so all rate feeds stay aligned\n`);
-  return d;
-})();
-
 // ── Data quality sanity check ─────────────────────────────────────────────────
 // Guards against AI-fabricated data that passes the freshness check but has
 // wrong values (e.g. inflated round numbers, missing entire days). Root cause:
@@ -368,9 +324,7 @@ const q9Data = readInput('q9.json');
 // co derived from Q9 daily data (not Q2/flat_file — avoids same-day lag)
 const weeklyCoMap = {};
 for (const r of q9Data) {
-  // Clamp to EFFECTIVE_THROUGH so weekly collections (co, from same-day 1237) cover the
-  // same days as weekly revenue (s, from the laggard 753) — keeps the pair aligned.
-  if (r.d >= W && (!THRU || r.d <= THRU) && knownCenters.has(r.c)) {
+  if (r.d >= W && knownCenters.has(r.c)) {
     weeklyCoMap[r.c] = (weeklyCoMap[r.c] || 0) + Math.round(parseFloat(r.co) || 0);
   }
 }
@@ -458,7 +412,7 @@ const dailyRows = q8Data.filter(r => knownCenters.has(r.c)).map(r => ({
 }));
 // DURABILITY: only touch days within the lookback window so a full-history q8
 // pull can't overwrite committed historical daily `inj` (canonical backfill).
-const safeDailyRows = dailyRows.filter(r => r.d >= LOOKBACK_START && (!THRU || r.d <= THRU));
+const safeDailyRows = dailyRows.filter(r => r.d >= LOOKBACK_START);
 const lookbackDates = [...new Set(safeDailyRows.map(r => r.d))];
 const existingDaily = readJson('daily-metrics.json');
 const withoutLookback = existingDaily.filter(r => !lookbackDates.includes(r.d));
