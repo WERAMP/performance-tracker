@@ -317,6 +317,56 @@ const knownCenters = new Set(locations.map(l => l.name));
   }
 })();
 
+// ── Data RECENCY guard (P0) ───────────────────────────────────────────────────
+// The structural data-quality check above catches fabrication/truncation (a
+// missing day in the MIDDLE of the lookback) but NOT recency lag (a missing day
+// at the END). Every "revenue is stale" incident this week (753 lag on 07-14 &
+// 07-17, etc.) was a source that hadn't finished its ETL batch by the 7:15am run:
+// the file was written today (mtime OK) and had 5+ dates / 100+ rows (structure
+// OK), but the newest date was 1-2 days behind yesterday. All guards passed and
+// stale data shipped silently. This guard asserts the daily feeds actually reach
+// yesterday and ABORTS if not, converting a silent-stale ship into a loud failure.
+//
+// `DATA_THROUGH` (min of the daily-revenue and daily-collections max dates) is the
+// honest "data through {X}" for the commit message (P3) — do NOT hardcode yesterday.
+let DATA_THROUGH = null;
+(function validateRecency() {
+  const q8 = readInput('q8.json');
+  const q9 = readInput('q9.json');
+  const ymdLocal = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  const y = new Date(); y.setDate(y.getDate() - 1);
+  const yesterday = ymdLocal(y);
+
+  const q8Max = [...new Set(q8.map(r => r.d).filter(Boolean))].sort().pop() || '(none)';
+  const q9Max = [...new Set(q9.map(r => r.d).filter(Boolean))].sort().pop() || '(none)';
+  DATA_THROUGH = [q8Max, q9Max].filter(x => x !== '(none)').sort()[0] || '(none)';
+
+  const errors = [];
+  if (q8Max < yesterday) errors.push(`RECENCY  q8.json (daily revenue): latest date ${q8Max} is behind yesterday ${yesterday} — revenue source (use_dataset 1237/753) is lagging its ETL batch`);
+  if (q9Max < yesterday) errors.push(`RECENCY  q9.json (daily collections): latest date ${q9Max} is behind yesterday ${yesterday} — collections source (use_dataset 1237) is lagging its ETL batch`);
+
+  console.log('--- data recency ---');
+  console.log(`ok?      yesterday=${yesterday}  q8_latest=${q8Max}  q9_latest=${q9Max}  ->  DATA_THROUGH=${DATA_THROUGH}`);
+
+  if (errors.length) {
+    console.error('\n=== DATA RECENCY CHECK FAILED ===');
+    for (const e of errors) console.error(e);
+    console.error('\nThe source data has not caught up to yesterday. This is almost always the');
+    console.error('CorralData ETL batch not being finished at run time — NOT a query bug.');
+    console.error('Action: wait for the batch to land (re-run later this morning), OR verify by');
+    console.error('querying MAX(sale_date) FROM use_dataset(1237) directly against CorralData.');
+    if (process.env.SKIP_RECENCY_CHECK) {
+      console.error('SKIP_RECENCY_CHECK set — proceeding anyway. Only use this after DIRECTLY confirming');
+      console.error('yesterday was a genuine zero-business day (e.g. a full-portfolio holiday closure).\n');
+    } else {
+      console.error('Do NOT build/commit/push until the data reaches yesterday.\n');
+      process.exit(1);
+    }
+  } else {
+    console.log('data recency ok\n');
+  }
+})();
+
 // ── Q9: load daily collections (dataset 1237) — needed early for weekly co ───
 const q9Data = readInput('q9.json');
 
@@ -605,3 +655,4 @@ if (freshToday('CORE_MONTHLY.json')) {
 }
 
 console.log('\n=== Done ===');
+console.log(`DATA_THROUGH=${DATA_THROUGH}  (use this exact date in the commit message: "chore: daily refresh ${W} — data through ${DATA_THROUGH}")`);
