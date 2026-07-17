@@ -397,31 +397,40 @@ const ntxRows = q4Data.filter(r => knownCenters.has(r.c))
 replaceWeek('weekly-ntx-filler.json', ntxRows);
 
 // ── 4. WEEKLY-BTX-PROVIDER + WEEKLY-BTX ──────────────────────────────────────
+// Q5 now spans the rolling 5-week window (matching q-btx-vial), and we rebuild the
+// BASE botox feeds for ALL those weeks via replaceWeeks — not just the current week.
+// This is REQUIRED for apply-exclusions.cjs's vial add-on (`total_qty += add_qty`)
+// to be idempotent: it always runs against a freshly-rebuilt, vial-free base, so a
+// week can never accumulate the vial units more than once. Before 2026-07-17 the
+// base was only rewritten for W, so the vial add compounded onto the trailing 4
+// weeks every run (Back to 30 - Highway 14 wk-06-15 had drifted 4576→4776+). Widening
+// Q5 + replaceWeeks self-heals those weeks from clean source data on the next run.
 const q5Data = readInput('q5.json');
 const btxProvRows = q5Data.filter(r => knownCenters.has(r.c) && r.pr != null)
   .map(r => {
     const n = fc(r.n);
     const total_qty = ff(r.total_qty);
     const b = n > 0 ? Math.round((total_qty / n) * 100) / 100 : null;
-    return { w: W, c: r.c, pr: r.pr, b, n, total_qty };
+    return { w: r.w, c: r.c, pr: r.pr, b, n, total_qty };
   });
-replaceWeek('weekly-btx-provider.json', btxProvRows);
+replaceWeeks('weekly-btx-provider.json', btxProvRows);
 const btxMap = {};
 for (const r of btxProvRows) {
-  if (!btxMap[r.c]) btxMap[r.c] = { sumQty: 0, sumN: 0 };
-  btxMap[r.c].sumQty += r.total_qty || 0;
-  btxMap[r.c].sumN += r.n || 0;
+  const k = `${r.w}|${r.c}`;
+  if (!btxMap[k]) btxMap[k] = { w: r.w, c: r.c, sumQty: 0, sumN: 0 };
+  btxMap[k].sumQty += r.total_qty || 0;
+  btxMap[k].sumN += r.n || 0;
 }
-const btxRows = Object.entries(btxMap).map(([c, v]) => {
+const btxRows = Object.values(btxMap).map(v => {
   const avg_units = v.sumN > 0 ? Math.round((v.sumQty / v.sumN) * 100) / 100 : null;
   return {
-    w: W, c,
+    w: v.w, c: v.c,
     b: avg_units,
     avg_units,
     total_qty: Math.round(v.sumQty * 100) / 100
   };
 });
-replaceWeek('weekly-btx.json', btxRows);
+replaceWeeks('weekly-btx.json', btxRows);
 
 // ── 5. WEEKLY-SYRINGE-LOC ─────────────────────────────────────────────────────
 const q6Data = readInput('q6.json');
@@ -563,6 +572,31 @@ function replaceDailyWeek(file, newRows) {
   console.log(`${file}: ${removed} removed (${W} week), ${newRows.length} added -> total=${merged.length}, latest=${wDates[wDates.length - 1]}`);
 }
 
+// Rolling daily variant: replaces every daily row whose date falls in the 7-day
+// span of any week in `weekList` (Monday starts), clamped to the same W-28 window
+// as replaceWeeks. Used for daily-btx-provider so the botox base is rebuilt across
+// the full rolling window (idempotent vial add — see §4 comment).
+function replaceDailyWeeks(file, newRows, weekList) {
+  const CUTOFF = (() => { const d = new Date(W + 'T00:00:00Z'); d.setUTCDate(d.getUTCDate() - 28); return d.toISOString().slice(0, 10); })();
+  const dateSet = new Set();
+  for (const w of [...new Set(weekList)].filter(w => w && w >= CUTOFF)) {
+    const base = new Date(w + 'T00:00:00Z');
+    for (let i = 0; i < WEEK_DAYS; i++) { const d = new Date(base); d.setUTCDate(d.getUTCDate() + i); dateSet.add(d.toISOString().slice(0, 10)); }
+  }
+  const existing = readJson(file);
+  const keep = newRows.filter(r => dateSet.has(r.d));
+  const merged = [...existing.filter(r => !dateSet.has(r.d)), ...keep];
+  merged.sort((a, b) =>
+    (a.d || '').localeCompare(b.d || '') ||
+    (a.c || '').localeCompare(b.c || '') ||
+    (a.pr || '').localeCompare(b.pr || '')
+  );
+  writeJson(file, merged);
+  const removed = existing.filter(r => dateSet.has(r.d)).length;
+  const weeks = [...new Set(weekList)].filter(w => w && w >= CUTOFF).sort();
+  console.log(`${file}: ${removed} removed across {${weeks.join(', ')}}, ${keep.length} added -> total=${merged.length}`);
+}
+
 // daily-inj-rev-provider: owned by apply-commercial-accuracy.cjs (Section-E definition),
 // NOT regenerated from canonical q11 here — see note at §9. (was: weekly/7 spread + replaceDailyWeek)
 
@@ -579,17 +613,24 @@ for (const r of metricsProvRows) {
 }
 replaceDailyWeek('daily-metrics-provider.json', dailyMetricsProv);
 
-// daily-btx-provider: n/total_qty are weekly totals → divide by 7; b is rate → keep
+// daily-btx-provider: n/total_qty are weekly totals → divide by 7; b is rate → keep.
+// Spread each provider-week across ITS OWN 7 days (btxProvRows now spans the rolling
+// window), and replace all those weeks' days so the base is rebuilt fresh — see §4.
+const daysOfWeek = (w) => {
+  const out = []; const base = new Date(w + 'T00:00:00Z');
+  for (let i = 0; i < WEEK_DAYS; i++) { const d = new Date(base); d.setUTCDate(d.getUTCDate() + i); out.push(d.toISOString().slice(0, 10)); }
+  return out;
+};
 const dailyBtxProv = [];
 for (const r of btxProvRows) {
-  for (const d of wDates)
+  for (const d of daysOfWeek(r.w))
     dailyBtxProv.push({ d, c: r.c, pr: r.pr,
       n:         Math.round(((r.n         || 0) / WEEK_DAYS) * 10000) / 10000,
       b:         r.b,
       total_qty: Math.round(((r.total_qty || 0) / WEEK_DAYS) * 10000) / 10000,
     });
 }
-replaceDailyWeek('daily-btx-provider.json', dailyBtxProv);
+replaceDailyWeeks('daily-btx-provider.json', dailyBtxProv, btxProvRows.map(r => r.w));
 
 // daily-rev-coll-provider: rev/coll are weekly totals → divide by 7
 const dailyRevCollProv = [];
