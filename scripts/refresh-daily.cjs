@@ -2,6 +2,15 @@
 // refresh-daily.cjs — PERMANENT daily refresh script
 // Do NOT modify this file each day. It reads from scripts/q{N}.json input files.
 //
+//   WINDOWING (durability — "prior week never finalized" fix, 2026-07-20):
+//   The week-anchored inputs (q1,q3,q4,q6,q7,q10,q12,q13,q14,q16,q17) span a trailing
+//   2-week window (`sale_date >= '{W}'::DATE - INTERVAL '7 days'`, prior + current
+//   week) and are folded in with replaceWeeks() keyed off each row's own `w`. That
+//   way a missed daily run or the Monday W-rollover self-heals: the just-completed
+//   prior week is re-queried and finalized instead of freezing at its last partial
+//   same-week capture. q5/q11 already use rolling windows; q8/q9 use the daily
+//   lookback. See scripts/SYNC-INJECTABLES.md → "Durability".
+//
 // Input files (overwrite these each day, never commit them):
 //   q1.json  — Q1 weekly revenue by center
 //   q3.json  — Q3 weekly ops by center
@@ -84,6 +93,13 @@ function ff(v) { const n = parseFloat(v); return isNaN(n) ? null : Math.round(n 
 // stay integer (fc). The UI still shows whole dollars (tiles Math.round; fmtDollar
 // rounds). apply-exclusions derives `sx` from `s` at 2–4dp, so this stays coherent.
 function fd(v) { return Math.round((parseFloat(v) || 0) * 100) / 100; }
+// mondayOf('2026-07-16') -> '2026-07-13' (ISO week start, matching Redshift
+// DATE_TRUNC('week', ...)). Used to bucket daily rows into their week anchor.
+function mondayOf(d) {
+  const dt = new Date(d + 'T00:00:00Z');
+  dt.setUTCDate(dt.getUTCDate() - ((dt.getUTCDay() + 6) % 7));
+  return dt.toISOString().slice(0, 10);
+}
 
 function replaceWeek(file, newRows) {
   const existing = readJson(file);
@@ -253,11 +269,32 @@ const REQUIRED_INPUTS = [
   console.log(`ok       all ${REQUIRED_INPUTS.length} inputs validated\n`);
 })();
 
-// ── Determine W from q1 data (falls back to q3 on early Monday when no sales yet) ──
+// ── Determine W = Monday of the current ISO week ──────────────────────────────
+// Computed from the calendar (matching the Step-1 SQL `DATE_TRUNC('week',
+// CURRENT_DATE)`), NOT from the first row of q1. The week-anchored q-files now
+// span a trailing 2-week window (prior week + current week — see the durability
+// note in scripts/SYNC-INJECTABLES.md), so their rows are ordered oldest-first
+// and `q1Data[0].w` would be the just-completed PRIOR week. Taking the calendar
+// Monday keeps W tied to the actual current week even on Monday morning before
+// the current week has any sales yet (when q1 contains only the prior week).
 const q1Data = readInput('q1.json');
 const _q3Early = readInput('q3.json');
-const W = q1Data.length > 0 ? q1Data[0].w : _q3Early[0].w;
-console.log(`W = ${W} (derived from ${q1Data.length > 0 ? 'q1' : 'q3 — early Monday, no sales yet'})`);
+const W = (() => {
+  const now = new Date();
+  const d = new Date(Date.UTC(now.getFullYear(), now.getMonth(), now.getDate()));
+  d.setUTCDate(d.getUTCDate() - ((d.getUTCDay() + 6) % 7)); // back up to Monday
+  return d.toISOString().slice(0, 10);
+})();
+const _weeksInData = [...q1Data, ..._q3Early].map(r => r.w).filter(Boolean).sort();
+const _latestWeekInData = _weeksInData.length ? _weeksInData[_weeksInData.length - 1] : '(none)';
+console.log(`W = ${W} (calendar Monday of current week; latest week in q1/q3 = ${_latestWeekInData})`);
+if (_latestWeekInData !== '(none)' && _latestWeekInData > W) {
+  console.error('\n=== W SANITY CHECK FAILED ===');
+  console.error(`Data contains week ${_latestWeekInData}, which is AFTER the computed current week ${W}.`);
+  console.error('The JS calendar and the SQL CURRENT_DATE disagree on the week boundary — aborting');
+  console.error('to avoid mis-anchoring the current week. (Check the machine clock / run time.)\n');
+  process.exit(1);
+}
 
 const locations = JSON.parse(fs.readFileSync(path.join(BASE, 'locations.json'), 'utf8'));
 const knownCenters = new Set(locations.map(l => l.name));
@@ -371,30 +408,36 @@ let DATA_THROUGH = null;
 const q9Data = readInput('q9.json');
 
 // ── 1. WEEKLY-METRICS ─────────────────────────────────────────────────────────
-// co derived from Q9 daily data (not Q2/flat_file — avoids same-day lag)
+// co derived from Q9 daily data (not Q2/flat_file — avoids same-day lag), keyed
+// per (week, center) so the trailing window's prior week gets its own collections
+// total. On the Monday rollover — the case that froze before — Q9's 7-day lookback
+// still fully covers the just-completed prior week, so replaceWeeks below finalizes
+// it. (Later in the week Q9 no longer reaches the prior week's first day(s); by then
+// that week was already finalized on the Monday run.)
 const weeklyCoMap = {};
 for (const r of q9Data) {
-  if (r.d >= W && knownCenters.has(r.c)) {
-    weeklyCoMap[r.c] = (weeklyCoMap[r.c] || 0) + Math.round(parseFloat(r.co) || 0);
+  if (knownCenters.has(r.c)) {
+    const k = mondayOf(r.d) + '|' + r.c;
+    weeklyCoMap[k] = (weeklyCoMap[k] || 0) + Math.round(parseFloat(r.co) || 0);
   }
 }
 const metricsRows = q1Data
   .filter(r => knownCenters.has(r.c))
-  .map(r => ({ w: W, c: r.c, s: fc(r.s), co: weeklyCoMap[r.c] || 0, p: fc(r.p), rt: fc(r.rt), inj: fc(r.inj) }));
-replaceWeek('weekly-metrics.json', metricsRows);
+  .map(r => ({ w: r.w, c: r.c, s: fc(r.s), co: weeklyCoMap[r.w + '|' + r.c] || 0, p: fc(r.p), rt: fc(r.rt), inj: fc(r.inj) }));
+replaceWeeks('weekly-metrics.json', metricsRows);
 
 // ── 2. WEEKLY-OPS ─────────────────────────────────────────────────────────────
 const q3Data = _q3Early;
 // cn/ns are percentage rates from dataset 754, t is appointment group count
-const opsRows = q3Data.filter(r => knownCenters.has(r.c))
-  .map(r => ({ w: W, c: r.c, cn: ff(r.cn), ns: ff(r.ns), t: fc(r.t) }));
-replaceWeek('weekly-ops.json', opsRows);
+const opsRows = q3Data.filter(r => knownCenters.has(r.c) && r.w)
+  .map(r => ({ w: r.w, c: r.c, cn: ff(r.cn), ns: ff(r.ns), t: fc(r.t) }));
+replaceWeeks('weekly-ops.json', opsRows);
 
 // ── 3. WEEKLY-NTX-FILLER ──────────────────────────────────────────────────────
 const q4Data = readInput('q4.json');
-const ntxRows = q4Data.filter(r => knownCenters.has(r.c))
-  .map(r => ({ w: W, c: r.c, ntx: fc(r.ntx), filler: fc(r.filler) }));
-replaceWeek('weekly-ntx-filler.json', ntxRows);
+const ntxRows = q4Data.filter(r => knownCenters.has(r.c) && r.w)
+  .map(r => ({ w: r.w, c: r.c, ntx: fc(r.ntx), filler: fc(r.filler) }));
+replaceWeeks('weekly-ntx-filler.json', ntxRows);
 
 // ── 4. WEEKLY-BTX-PROVIDER + WEEKLY-BTX ──────────────────────────────────────
 // Q5 now spans the rolling 5-week window (matching q-btx-vial), and we rebuild the
@@ -434,27 +477,27 @@ replaceWeeks('weekly-btx.json', btxRows);
 
 // ── 5. WEEKLY-SYRINGE-LOC ─────────────────────────────────────────────────────
 const q6Data = readInput('q6.json');
-const syrRows = q6Data.filter(r => knownCenters.has(r.c))
-  .map(r => ({ w: W, c: r.c, si: ff(r.si), sf: ff(r.sf), ni: parseInt(r.ni) || 0, nf: parseInt(r.nf) || 0 }));
-replaceWeek('weekly-syringe-loc.json', syrRows);
+const syrRows = q6Data.filter(r => knownCenters.has(r.c) && r.w)
+  .map(r => ({ w: r.w, c: r.c, si: ff(r.si), sf: ff(r.sf), ni: parseInt(r.ni) || 0, nf: parseInt(r.nf) || 0 }));
+replaceWeeks('weekly-syringe-loc.json', syrRows);
 
 // ── 6. WEEKLY-PROVIDER-HOURS + WEEKLY-UTILIZATION ────────────────────────────
 const q7Data = readInput('q7.json');
-const schedRows = q7Data.filter(r => knownCenters.has(r.c)).map(r => ({
-  w: W, c: r.c,
+const schedRows = q7Data.filter(r => knownCenters.has(r.c) && r.w).map(r => ({
+  w: r.w, c: r.c,
   h: Math.round(parseFloat(r.h) * 10) / 10,
   sh: Math.round(parseFloat(r.sh) * 10) / 10,
   bh: Math.round(parseFloat(r.bh) * 10) / 10
 }));
-replaceWeek('weekly-provider-hours.json', schedRows);
+replaceWeeks('weekly-provider-hours.json', schedRows);
 const q16Data = readInput('q16.json');
-const utilRows = q16Data.filter(r => knownCenters.has(r.c)).map(r => {
+const utilRows = q16Data.filter(r => knownCenters.has(r.c) && r.w).map(r => {
   const nh = parseFloat(r.nh) || 0;
   const sh = parseFloat(r.sh) || 0;
   const ur = nh > 0 ? Math.round((sh / nh) * 100 * 100) / 100 : 0;
-  return { w: W, c: r.c, ur };
+  return { w: r.w, c: r.c, ur };
 }).filter(r => r.ur > 0);
-replaceWeek('weekly-utilization.json', utilRows);
+replaceWeeks('weekly-utilization.json', utilRows);
 
 // ── 7. DAILY-METRICS (7-day lookback) ────────────────────────────────────────
 const q8Data = readInput('q8.json');
@@ -482,9 +525,9 @@ console.log(`daily-metrics.json: ${existingDaily.filter(r => lookbackDates.inclu
 
 // ── 8. WEEKLY-METRICS-PROVIDER ───────────────────────────────────────────────
 const q10Data = readInput('q10.json');
-const metricsProvRows = q10Data.filter(r => knownCenters.has(r.c) && r.pr != null)
-  .map(r => ({ w: W, c: r.c, pr: r.pr, s: fc(r.s), p: fc(r.p), rt: fc(r.rt), inj: fc(r.inj) }));
-replaceWeek('weekly-metrics-provider.json', metricsProvRows);
+const metricsProvRows = q10Data.filter(r => knownCenters.has(r.c) && r.pr != null && r.w)
+  .map(r => ({ w: r.w, c: r.c, pr: r.pr, s: fc(r.s), p: fc(r.p), rt: fc(r.rt), inj: fc(r.inj) }));
+replaceWeeks('weekly-metrics-provider.json', metricsProvRows);
 
 // ── 9. WEEKLY-INJ-REV-PROVIDER ───────────────────────────────────────────────
 // Q11 should now emit the trailing 4 weeks of injectable revenue (not just the
@@ -511,36 +554,39 @@ const injRevProvRows = q11Data.filter(r => knownCenters.has(r.c) && r.pr != null
 const q12Data = readInput('q12.json');
 const collProvMap = {};
 for (const r of q12Data) {
-  if (knownCenters.has(r.c) && r.pr != null) collProvMap[r.c + '|' + r.pr] = ff(r.coll) || 0;
+  if (knownCenters.has(r.c) && r.pr != null) collProvMap[r.w + '|' + r.c + '|' + r.pr] = ff(r.coll) || 0;
 }
 const revCollProvRows = metricsProvRows.map(r => ({
-  w: W, c: r.c, pr: r.pr, rev: r.s, coll: collProvMap[r.c + '|' + r.pr] || 0
+  w: r.w, c: r.c, pr: r.pr, rev: r.s, coll: collProvMap[r.w + '|' + r.c + '|' + r.pr] || 0
 }));
-replaceWeek('weekly-rev-coll-provider.json', revCollProvRows);
+replaceWeeks('weekly-rev-coll-provider.json', revCollProvRows);
 
 // ── 11. WEEKLY-SYRINGE-PROVIDER ──────────────────────────────────────────────
 const q13Data = readInput('q13.json');
-const syrProvRows = q13Data.filter(r => knownCenters.has(r.c) && r.pr != null)
-  .map(r => ({ w: W, c: r.c, pr: r.pr, n: fc(r.n), si: ff(r.si), sf: ff(r.sf) }));
-replaceWeek('weekly-syringe-provider.json', syrProvRows);
+const syrProvRows = q13Data.filter(r => knownCenters.has(r.c) && r.pr != null && r.w)
+  .map(r => ({ w: r.w, c: r.c, pr: r.pr, n: fc(r.n), si: ff(r.si), sf: ff(r.sf) }));
+replaceWeeks('weekly-syringe-provider.json', syrProvRows);
 
 // ── 12. WEEKLY-OPS-PROVIDER ──────────────────────────────────────────────────
 const q14Data = readInput('q14.json');
-// cn/ns are percentage rates from dataset 754
+// cn/ns are percentage rates from dataset 754. Q14 now spans the trailing 2-week
+// window; each row keeps its own week anchor and replaceWeeks clamps to W-28, so
+// we no longer filter to `r.w === W` (that filter is what left the prior week
+// frozen on the Monday rollover).
 const opsProvRows = q14Data
-  .filter(r => knownCenters.has(r.c) && r.pr != null && r.w === W)
-  .map(r => ({ w: W, c: r.c, pr: r.pr, cn: ff(r.cn), ns: ff(r.ns), t: fc(r.t) }));
-replaceWeek('weekly-ops-provider.json', opsProvRows);
+  .filter(r => knownCenters.has(r.c) && r.pr != null && r.w)
+  .map(r => ({ w: r.w, c: r.c, pr: r.pr, cn: ff(r.cn), ns: ff(r.ns), t: fc(r.t) }));
+replaceWeeks('weekly-ops-provider.json', opsProvRows);
 
 // ── 13. WEEKLY-UTIL-HOURS-PROVIDER ───────────────────────────────────────────
 const q17Data = readInput('q17.json');
-const utilProvRows = q17Data.filter(r => knownCenters.has(r.c) && r.pr != null).map(r => {
+const utilProvRows = q17Data.filter(r => knownCenters.has(r.c) && r.pr != null && r.w).map(r => {
   const nh = parseFloat(r.nh) || 0;
   const sh = parseFloat(r.sh) || 0;
   const ur = nh > 0 ? Math.round((sh / nh) * 100 * 100) / 100 : 0;
-  return { w: W, c: r.c, pr: r.pr, h: ff(r.nh), sh: ff(r.sh), ur };
+  return { w: r.w, c: r.c, pr: r.pr, h: ff(r.nh), sh: ff(r.sh), ur };
 }).filter(r => r.h > 0);
-replaceWeek('weekly-util-hours-provider.json', utilProvRows);
+replaceWeeks('weekly-util-hours-provider.json', utilProvRows);
 
 // ── 14. DAILY PROVIDER FILES (spread weekly data across 7 days) ──────────────
 // Provider Performance cards use daily-grain files so MTD/QTD/YTD date filters
@@ -548,29 +594,14 @@ replaceWeek('weekly-util-hours-provider.json', utilProvRows);
 // Each weekly row becomes 7 identical daily rows (Mon–Sun): totals divided by 7,
 // rates/averages kept constant.
 const WEEK_DAYS = 7;
-const wDates = (() => {
-  const dates = [];
-  const base = new Date(W + 'T00:00:00Z');
-  for (let i = 0; i < WEEK_DAYS; i++) {
-    const d = new Date(base); d.setUTCDate(d.getUTCDate() + i);
-    dates.push(d.toISOString().slice(0, 10));
-  }
-  return dates;
-})();
-const wDateSet = new Set(wDates);
-
-function replaceDailyWeek(file, newRows) {
-  const existing = readJson(file);
-  const merged = [...existing.filter(r => !wDateSet.has(r.d)), ...newRows];
-  merged.sort((a, b) =>
-    (a.d || '').localeCompare(b.d || '') ||
-    (a.c || '').localeCompare(b.c || '') ||
-    (a.pr || '').localeCompare(b.pr || '')
-  );
-  writeJson(file, merged);
-  const removed = existing.filter(r => wDateSet.has(r.d)).length;
-  console.log(`${file}: ${removed} removed (${W} week), ${newRows.length} added -> total=${merged.length}, latest=${wDates[wDates.length - 1]}`);
-}
+// The Mon–Sun ISO dates of week `w` (a Monday anchor). Each weekly provider row is
+// spread across ITS OWN week's 7 days so the trailing-window prior week lands on the
+// right calendar days (not always the current week's), mirroring daily-btx-provider.
+const daysOfWeek = (w) => {
+  const out = []; const base = new Date(w + 'T00:00:00Z');
+  for (let i = 0; i < WEEK_DAYS; i++) { const d = new Date(base); d.setUTCDate(d.getUTCDate() + i); out.push(d.toISOString().slice(0, 10)); }
+  return out;
+};
 
 // Rolling daily variant: replaces every daily row whose date falls in the 7-day
 // span of any week in `weekList` (Monday starts), clamped to the same W-28 window
@@ -600,10 +631,11 @@ function replaceDailyWeeks(file, newRows, weekList) {
 // daily-inj-rev-provider: owned by apply-commercial-accuracy.cjs (Section-E definition),
 // NOT regenerated from canonical q11 here — see note at §9. (was: weekly/7 spread + replaceDailyWeek)
 
-// daily-metrics-provider: s/p/rt/inj are weekly totals → divide by 7
+// daily-metrics-provider: s/p/rt/inj are weekly totals → divide by 7, spread over
+// each row's own week; replaceDailyWeeks rebuilds all those weeks' days.
 const dailyMetricsProv = [];
 for (const r of metricsProvRows) {
-  for (const d of wDates)
+  for (const d of daysOfWeek(r.w))
     dailyMetricsProv.push({ d, c: r.c, pr: r.pr,
       s:   Math.round((r.s   / WEEK_DAYS) * 100) / 100,
       p:   Math.round((r.p   / WEEK_DAYS) * 10000) / 10000,
@@ -611,16 +643,11 @@ for (const r of metricsProvRows) {
       inj: Math.round((r.inj / WEEK_DAYS) * 100) / 100,
     });
 }
-replaceDailyWeek('daily-metrics-provider.json', dailyMetricsProv);
+replaceDailyWeeks('daily-metrics-provider.json', dailyMetricsProv, metricsProvRows.map(r => r.w));
 
 // daily-btx-provider: n/total_qty are weekly totals → divide by 7; b is rate → keep.
 // Spread each provider-week across ITS OWN 7 days (btxProvRows now spans the rolling
 // window), and replace all those weeks' days so the base is rebuilt fresh — see §4.
-const daysOfWeek = (w) => {
-  const out = []; const base = new Date(w + 'T00:00:00Z');
-  for (let i = 0; i < WEEK_DAYS; i++) { const d = new Date(base); d.setUTCDate(d.getUTCDate() + i); out.push(d.toISOString().slice(0, 10)); }
-  return out;
-};
 const dailyBtxProv = [];
 for (const r of btxProvRows) {
   for (const d of daysOfWeek(r.w))
@@ -632,28 +659,28 @@ for (const r of btxProvRows) {
 }
 replaceDailyWeeks('daily-btx-provider.json', dailyBtxProv, btxProvRows.map(r => r.w));
 
-// daily-rev-coll-provider: rev/coll are weekly totals → divide by 7
+// daily-rev-coll-provider: rev/coll are weekly totals → divide by 7, spread over each row's own week
 const dailyRevCollProv = [];
 for (const r of revCollProvRows) {
-  for (const d of wDates)
+  for (const d of daysOfWeek(r.w))
     dailyRevCollProv.push({ d, c: r.c, pr: r.pr,
       rev:  Math.round((r.rev  / WEEK_DAYS) * 100) / 100,
       coll: Math.round((r.coll / WEEK_DAYS) * 100) / 100,
     });
 }
-replaceDailyWeek('daily-rev-coll-provider.json', dailyRevCollProv);
+replaceDailyWeeks('daily-rev-coll-provider.json', dailyRevCollProv, revCollProvRows.map(r => r.w));
 
 // daily-syringe-provider: n is weekly total → divide by 7; si/sf are rates → keep
 const dailySyrProv = [];
 for (const r of syrProvRows) {
-  for (const d of wDates)
+  for (const d of daysOfWeek(r.w))
     dailySyrProv.push({ d, c: r.c, pr: r.pr,
       n:  Math.round(((r.n || 0) / WEEK_DAYS) * 10000) / 10000,
       si: r.si,
       sf: r.sf,
     });
 }
-replaceDailyWeek('daily-syringe-provider.json', dailySyrProv);
+replaceDailyWeeks('daily-syringe-provider.json', dailySyrProv, syrProvRows.map(r => r.w));
 
 // ── Metric exclusions (fees / consult / GFE / vitamin) + botox <10u feeds ──
 // Re-applies on top of the feeds written above so the exclusions survive every

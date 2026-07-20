@@ -127,9 +127,20 @@ appear as `serviced_by` (the provider universe).
 
 ## Durability — history is protected on every machine
 
-`refresh-daily.cjs` now **structurally** only writes the current week (`replaceWeek`),
-the trailing ~4 weeks (`replaceWeeks`), or the daily lookback window — and **drops any
-q-file rows outside that window**. So even if the daily refresh is run on someone else's
+**2026-07-20 — trailing-2-week windowing for the "prior week never finalized" fix.**
+The week-anchored inputs (q1,q3,q4,q6,q7,q10,q12,q13,q14,q16,q17) now span a trailing
+2-week window (`sale_date >= '{W}'::DATE - INTERVAL '7 days'`, prior + current week)
+and are folded in with **`replaceWeeks()`** (keyed off each row's own `w`), not
+`replaceWeek(W)`. This self-heals the Monday W-rollover / missed-run freeze: the
+just-completed prior week is re-queried and rewritten every run instead of staying
+frozen at its last partial same-week capture. `replaceWeeks()` still clamps to a
+trailing W-28 window, so committed history older than the pull is untouched.
+
+`refresh-daily.cjs` **structurally** only writes the trailing 2-week window
+(`replaceWeeks`), the trailing ~4/5 weeks (btx `replaceWeeks`), or the daily lookback
+window — and **drops any q-file rows outside that window**. (`replaceWeek` remains only
+as the internal single-week fallback inside `replaceWeeks` when an input carries no
+week info.) So even if the daily refresh is run on someone else's
 machine (e.g. Kieren's) with a full-history or non-canonical pull, it **cannot overwrite
 the committed canonical injectables (`inj`/`r`) or sold_by retail (`rt`/`s`) history** —
 those values stay as committed. The console logs "N non-current-week rows ignored — history
