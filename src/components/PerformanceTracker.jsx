@@ -3123,7 +3123,28 @@ export default function PerformanceTracker({ initialLocTypes, initialPractices, 
       setSyringeLocData(syrLoc);
       setSyringeProvData(syrProv);
       setRevCollProvData(revCollProv);
-      setProviderHoursData(provHours);
+      // Net Provider Hours: derive from the dataset-1225 provider feed (weekly-util-hours-provider,
+      // the same source the Utilization chart uses) instead of weekly-provider-hours.json.
+      // weekly-provider-hours comes from zenoti_corp.transformed_employee_schedules, which
+      // (a) counts ALL staff, not just providers, and (b) lags ~6 days — so the most-recent
+      // completed week collapsed (wk 2026-07-13 read 2,664 hrs vs the true ~5,200), spiking
+      // Revenue-per-Net-Provider-Hour to ~$872. Aggregating the provider-level 1225 feed by
+      // center gives current, provider-scoped net hours consistent with Utilization. The
+      // weekly-provider-hours.json fetch is left in place (harmless) but no longer consumed.
+      const provHoursFrom1225 = (() => {
+        const agg = {};
+        for (const r of (utilHoursProvData || [])) {
+          if (r.pr == null || !r.w || !r.c) continue;
+          const k = r.w + '|' + r.c;
+          if (!agg[k]) agg[k] = { w: r.w, c: r.c, h: 0 };
+          agg[k].h += (parseFloat(r.h) || 0);
+        }
+        return Object.values(agg).map(r => {
+          const h = Math.round(r.h * 10) / 10;
+          return { w: r.w, c: r.c, h, sh: h, bh: 0 };
+        });
+      })();
+      setProviderHoursData(provHoursFrom1225.length ? provHoursFrom1225 : provHours);
       setUtilizationData(utilization);
       setMetricsProviderData(metricsProvData);
       setOpsProviderData(opsProvData);
@@ -5626,7 +5647,7 @@ export default function PerformanceTracker({ initialLocTypes, initialPractices, 
           </ChartCard>
           <ChartCard
             title="Net Provider Hours"
-            tooltip="Total net scheduled provider hours (scheduled hours minus blockout hours) by location per week"
+            tooltip="Total net (billable) scheduled hours for Provider/LME staff by location per week (source: dataset 1225, same as Utilization)"
             headerRight={
               <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
                 <ChartTimeControl chartId="netHours" globalMode={globalTimeMode} globalCount={globalPeriodCount} overrides={chartTimeOverrides} setOverrides={setChartTimeOverrides} />
